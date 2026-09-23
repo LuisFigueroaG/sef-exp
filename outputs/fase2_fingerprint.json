@@ -1,0 +1,74 @@
+{
+  "sha256": "5dea8a2e0186cfe3caad495725969342cff89c3ac8e42baf3ad3dd5396f62c75",
+  "config": {
+    "familias": [
+      [
+        "scores",
+        [
+          "CVSC100",
+          "CVSC150"
+        ]
+      ],
+      [
+        "satisfactorias",
+        [
+          "AM03",
+          "AM26"
+        ]
+      ],
+      [
+        "totales",
+        [
+          "AT01",
+          "AT30"
+        ]
+      ],
+      [
+        "antiguedad",
+        [
+          "AT93",
+          "IN20"
+        ]
+      ],
+      [
+        "consultas",
+        [
+          "GO06",
+          "GO243"
+        ]
+      ],
+      [
+        "cv_uso",
+        [
+          "CVPRPAYMNT11",
+          "CVPRTRD"
+        ]
+      ],
+      [
+        "revolvente",
+        [
+          "RE03",
+          "BC111"
+        ]
+      ],
+      [
+        "cobranzas",
+        [
+          "PR09",
+          "PR95"
+        ]
+      ]
+    ],
+    "k": 6,
+    "seed_folds": 42,
+    "iv_min": 0.1,
+    "corr_max": 0.7,
+    "vif_max": 5.0,
+    "bin_cfg": {
+      "dtype": "numerical",
+      "solver": "cp",
+      "max_n_bins": 5,
+      "min_prebin_size": 0.05
+    }
+  }
+}

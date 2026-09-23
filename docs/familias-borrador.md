@@ -49,5 +49,7 @@ combinaciones estructurales antes de filtros.
 ## Pendiente de aprobacion
 
 Confirmar cortes de F_satisfactorias y F_antiguedad, politica
-de sensibles, y subespacio chico exacto con su N_k calculado.
-Sin esta aprobacion no se comparan resultados.
+de sensibles y catalogo para el espacio completo de 35 variables.
+La fase 2 uso un subespacio explicito de 16 variables, congelado
+en `docs/fase2.md` antes de medir. Sus resultados solo comparan
+algoritmos dentro de ese subespacio; no validan este catalogo amplio.

@@ -2,7 +2,7 @@
 
 Experimento de seleccion de variables para scorecards con busqueda evolutiva y restricciones.
 
-Estado: propuesta metodologica, sin resultados empiricos. Este repo es solo investigacion y experimentacion, no libreria.
+Estado: evaluador comun y fase 2 completados. Resultados en `docs/fase2-resultados.md`. Este repo es solo investigacion y experimentacion, no libreria.
 
 ## Objetivo
 
@@ -36,13 +36,15 @@ Requiere `uv`.
 ```sh
 uv sync
 uv run python -c "import sef_exp; print('ok')"
+uv run python -m sef_exp.fase2 --solo-oraculo
+uv run python -m sef_exp.fase2
 ```
 
 ## Roadmap
 
 1. Contrato del problema y evaluador comun con folds y semillas fijas
-2. Oraculo exhaustivo chico con aleatorio, forward e intercambios
+2. Oraculo exhaustivo chico con aleatorio, forward e intercambios. Ver `docs/fase2.md`.
 3. Genetico por familias, luego mejora local y sustituto, con ablaciones
-4. Generalizacion con validacion externa y cortes temporales
+4. Generalizacion con test reservado; sin cortes temporales porque los CSV no tienen fecha
 
 La superioridad queda abierta hasta completar experimentos.

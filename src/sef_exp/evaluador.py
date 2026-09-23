@@ -105,7 +105,18 @@ def precomputar(xtr, ytr, folds, var_list=None, log=None):
     return pre
 
 
+def precomputar_woe(xtr, folds, pre, var_list):
+    """Cache the fixed fold transformations once for repeated candidate evaluations."""
+    return {
+        (r, var): pre[(r, var)]["opt"].transform(columna(xtr, var), metric="woe").ravel()
+        for r in range(len(folds))
+        for var in var_list
+    }
+
+
 def _vif_max(W):
+    if W.shape[1] == 1:
+        return 1.0
     R = np.corrcoef(W, rowvar=False)
     if R.shape != (W.shape[1], W.shape[1]) or not np.all(np.isfinite(R)):
         return float("inf")
@@ -119,21 +130,26 @@ def _vif_max(W):
     return float(np.max(d))
 
 
-def evaluar(S, xtr, ytr, folds, pre):
-    if len(S) != K_VARS:
+def evaluar(S, xtr, ytr, folds, pre, woe_cache=None, k=K_VARS):
+    if len(S) != k:
         return {"estado": "rechazado", "causa": "k_distinto", "J": None, "aucs": []}
     aucs = []
     for r, (tr, va) in enumerate(folds):
         cols_tr, cols_va = [], []
-        x = {v: columna(xtr, v) for v in S}
         for v in S:
             iv = pre[(r, v)]["iv"]
             if not np.isfinite(iv) or iv <= IV_MIN:
                 return {"estado": "rechazado", "causa": "IV_%s_fold%d" % (v, r),
                         "J": None, "aucs": aucs}
-            opt = pre[(r, v)]["opt"]
-            cols_tr.append(opt.transform(x[v][tr], metric="woe").ravel())
-            cols_va.append(opt.transform(x[v][va], metric="woe").ravel())
+            if woe_cache is None:
+                opt = pre[(r, v)]["opt"]
+                x = columna(xtr, v)
+                cols_tr.append(opt.transform(x[tr], metric="woe").ravel())
+                cols_va.append(opt.transform(x[va], metric="woe").ravel())
+            else:
+                woe = woe_cache[(r, v)]
+                cols_tr.append(woe[tr])
+                cols_va.append(woe[va])
         Wtr = np.column_stack(cols_tr)
         Wva = np.column_stack(cols_va)
         if not np.all(np.isfinite(Wtr)) or not np.all(np.isfinite(Wva)):
@@ -142,9 +158,12 @@ def evaluar(S, xtr, ytr, folds, pre):
         if any(np.std(Wtr[:, j]) == 0.0 for j in range(Wtr.shape[1])):
             return {"estado": "rechazado", "causa": "constante_fold%d" % r,
                     "J": None, "aucs": aucs}
-        R = np.corrcoef(Wtr, rowvar=False)
-        off = R - np.eye(R.shape[0])
-        cmax = float(np.nanmax(np.abs(off)))
+        if len(S) == 1:
+            cmax = 0.0
+        else:
+            R = np.corrcoef(Wtr, rowvar=False)
+            off = R - np.eye(R.shape[0])
+            cmax = float(np.nanmax(np.abs(off)))
         if not np.isfinite(cmax) or cmax >= CORR_MAX:
             return {"estado": "rechazado", "causa": "corr_fold%d_%.3f" % (r, cmax),
                     "J": None, "aucs": aucs}

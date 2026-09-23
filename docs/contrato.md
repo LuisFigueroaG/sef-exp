@@ -1,7 +1,8 @@
 # Contrato del problema SEF x MRAP automotriz
 
 Fuente: adaptacion de docs/propuesta-original.tex a datos locales.
-Estado: decisiones cerradas por grilling el 2026-09-22. Sin resultados empiricos.
+Estado: decisiones cerradas por grilling el 2026-09-22. Fase 2 ejecutada;
+ver docs/fase2-resultados.md.
 
 ## Objetivo
 

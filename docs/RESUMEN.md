@@ -10,6 +10,8 @@ Decision clave: AUC manda para comparar optimizadores. KS, PR-AUC, calibracion, 
 
 El protocolo separa eficiencia y generalizacion. En espacios chicos se enumera todo y se mide brecha al optimo contra ensayos. En espacios grandes se compara con igual presupuesto y se habla de mejor observado. Se exige validacion externa y pruebas temporales. Baselines: aleatorio, forward, stepwise adaptado, busqueda local, genetico basico, genetico con local y TPE.
 
-Estado actual: sin implementacion ni resultados. Parametros iniciales por preregistrar. Figura del documento ilustrativa, no evidencia.
+Estado de la propuesta original: sus figuras son ilustrativas. La adaptacion
+implementada, las decisiones congeladas y los primeros resultados estan en
+`docs/fase2.md` y `docs/fase2-resultados.md`.
 
 Riesgos principales: costo por candidato, filtro IV duro que descarta aporte condicional, sustituto fragil al inicio, y poca potencia en datasets chicos para diferencias finas de AUC.
