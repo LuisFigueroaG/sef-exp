@@ -71,5 +71,6 @@ uv run python scripts/tpe_hostil.py
 uv run python -m sef_exp.hostil --solo-graficos
 ```
 
-`data/hostil/` versiona train/test. `work/hostil_*` desechable.
-`outputs/hostil_*` versionables.
+`data/hostil/` NO se versiona (85 MB): se regenera identico con
+`scripts/generar_hostil.py` de semillas fijas antes de correr.
+`work/hostil_*` desechable. `outputs/hostil_*` versionables.

@@ -14,3 +14,6 @@ data/taiwan/taiwan.csv
 
 # Crudos API (regenerables con el script); solo se versiona la particion.
 data/series/crudo/
+
+# Datos sinteticos: se regeneran con scripts/generar_hostil.py (semillas fijas).
+data/hostil/*.csv
