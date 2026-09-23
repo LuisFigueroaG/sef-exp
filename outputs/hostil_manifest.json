@@ -1,0 +1,141 @@
+{
+  "evaluador": {
+    "datos_y_evaluador_sha256": "b35809b6a8076417d470cf19c733691dcac24285c10245a25c83f87e06747161",
+    "fold_seed": 42,
+    "k": 6,
+    "iv_min": 0.1,
+    "corr_max": 0.7,
+    "vif_max": 5.0,
+    "bin_cfg": {
+      "dtype": "numerical",
+      "solver": "cp",
+      "max_n_bins": 5,
+      "min_prebin_size": 0.05
+    },
+    "metrica": "AUC medio 5 folds",
+    "modelo": "HGB",
+    "hgb_params": {
+      "max_iter": 50,
+      "max_leaf_nodes": 31,
+      "learning_rate": 0.1,
+      "min_samples_leaf": 200,
+      "l2_regularization": 1.0
+    },
+    "filtros": "ninguno salvo ajuste"
+  },
+  "familias": [
+    [
+      "F1",
+      [
+        "v1a",
+        "v1b",
+        "v1c"
+      ]
+    ],
+    [
+      "F2",
+      [
+        "v2a",
+        "v2b",
+        "v2c"
+      ]
+    ],
+    [
+      "F3",
+      [
+        "v3a",
+        "v3b",
+        "v3c"
+      ]
+    ],
+    [
+      "F4",
+      [
+        "v4a",
+        "v4b",
+        "v4c"
+      ]
+    ],
+    [
+      "F5",
+      [
+        "v5a",
+        "v5b",
+        "v5c"
+      ]
+    ],
+    [
+      "F6",
+      [
+        "v6a",
+        "v6b",
+        "v6c"
+      ]
+    ],
+    [
+      "F7",
+      [
+        "v7a",
+        "v7b",
+        "v7c"
+      ]
+    ],
+    [
+      "F8",
+      [
+        "v8a",
+        "v8b",
+        "v8c"
+      ]
+    ],
+    [
+      "F9",
+      [
+        "v9a",
+        "v9b",
+        "v9c"
+      ]
+    ],
+    [
+      "F10",
+      [
+        "v10a",
+        "v10b",
+        "v10c"
+      ]
+    ]
+  ],
+  "espacio_estructural": 153090,
+  "metodos": [
+    "aleatorio",
+    "local",
+    "ga_local",
+    "sef_completo"
+  ],
+  "semillas": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "presupuestos": [
+    50,
+    100,
+    250
+  ],
+  "codigo_sha256": "d9353ff66f270a9f75dddd5cb72fcc5b41afd09e15bfe2c70b218a4e18660fff",
+  "versiones": {
+    "numpy": "2.5.3",
+    "scipy": "1.18.1",
+    "scikit-learn": "1.9.1",
+    "optbinning": "1.0.0",
+    "polars": "1.44.2",
+    "plotly": "7.1.0"
+  }
+}

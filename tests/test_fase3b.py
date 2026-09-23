@@ -107,7 +107,8 @@ class SearchTests(unittest.TestCase):
                 espacio=SPACE, summary_path=summary,
                 metrics_path=metrics, stability_path=stability,
                 presupuestos=fase3b.BUDGETS, epsilon=0.001,
-                etiqueta_y="AUC medio de cinco folds")
+                etiqueta_y="AUC medio de cinco folds",
+                semillas=fase3b.SEEDS)
             result = fase3b.metricas(stub)
             self.assertEqual(len(result), len(fase3b.METHODS) * len(fase3b.BUDGETS))
             with stability.open() as f:

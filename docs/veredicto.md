@@ -48,10 +48,14 @@ Medianas de T (censuras entre parentesis) y R media:
 2. El greedy empata en scorecards (3b, 4: mismo conjunto) y
    pierde en series (0,25 y 0,5 AICc). La forma del paisaje
    manda, no el algoritmo.
-3. El sustituto no decide ningun resultado: ga_local y
-   sef_completo empatan en medianas de todos los tracks. TPE,
-   el otro metodo con modelo, empata arriba y llega antes
-   pero a costo de reloj muy superior.
+3. El sustituto no decidia nada... hasta el track hostil.
+   En scorecards y series ARIMAX, ga_local y sef_completo
+   empatan siempre. Pero en interacciones plantadas con
+   evaluacion cara, el SEF es el unico con mediana en el
+   optimo (0,9433, 9/10): ga 3/10, TPE 3/10, local 1/10.
+   Enmienda: el sustituto decide cuando hay interacciones
+   que el greedy no ve Y trials que duelen. Sin esas dos
+   condiciones, sobra.
 4. Aleatorio es el unico siempre peor, y ni a 2000 converge
    del todo (19/20 en series2, 17 censuras en 3b a 0,001).
    La busqueda guiada si importa; cual de ellas, no tanto.

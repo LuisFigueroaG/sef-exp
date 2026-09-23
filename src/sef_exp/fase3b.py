@@ -52,6 +52,7 @@ class Config:
     lags: tuple = (0,)
     p_max: int = 3
     q_max: int = 2
+    semillas: tuple = SEEDS
     evaluar_set: object = None
     preparar_fn: object = None
     bits_fn: object = None
@@ -203,7 +204,7 @@ def manifiesto(cfg=None):
         "familias": cfg.espacio.familias,
         "espacio_estructural": cfg.espacio.total,
         "metodos": METHODS,
-        "semillas": SEEDS,
+        "semillas": cfg.semillas,
         "presupuestos": cfg.presupuestos,
         "codigo_sha256": sha_archivos(cfg.codigo),
         "versiones": {name: importlib.metadata.version(name) for name in (
@@ -691,8 +692,8 @@ def metricas(cfg=None):
         for budget in disponibles:
             selected = [r for r in rows if r["metodo"] == method
                         and int(r["presupuesto"]) == budget]
-            if len(selected) != len(SEEDS):
-                print(f"  sin {len(SEEDS)} semillas para {method} B={budget}: "
+            if len(selected) != len(cfg.semillas):
+                print(f"  sin {len(cfg.semillas)} semillas para {method} B={budget}: "
                       f"se omite ({cfg.nombre})", flush=True)
                 continue
             js = [float(r["mejor_J"]) for r in selected if r["mejor_J"]]
@@ -843,7 +844,7 @@ def _ejecutar(pilot, pilot_trials, pilot_seeds, render, cfg):
             raise RuntimeError("Resumen de fase 3b sin manifiesto")
         else:
             cfg.manifest_path.write_text(json.dumps(payload, indent=2) + "\n")
-        methods, seeds, limit = METHODS, SEEDS, min(max(cfg.presupuestos),
+        methods, seeds, limit = METHODS, cfg.semillas, min(max(cfg.presupuestos),
                                                     cfg.espacio.total)
         summary_path = cfg.summary_path
         runs_dir = cfg.runs_dir
