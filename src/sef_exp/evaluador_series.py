@@ -11,6 +11,13 @@ from statsmodels.tsa.stattools import kpss
 EXOGENAS = ("IPC", "TPM", "DOLAR", "COBRE", "DESEMPLEO")
 
 
+def parte_exogena(token):
+    if "_L" in token:
+        base, lag = token.rsplit("_L", 1)
+        return base, int(lag)
+    return token, 0
+
+
 def decodificar(S):
     p = q = None
     exogenas = []
@@ -53,11 +60,12 @@ def evaluar_serie(S, ytr, Xtr, d):
     p, q, exogenas = decodificar(S)
     if p is None or q is None or len(exogenas) != 2:
         return {"estado": "rechazado", "causa": "estructura", "J": None, "aucs": []}
-    if any(e not in EXOGENAS for e in exogenas):
+    y = np.asarray(ytr, dtype=float)
+    try:
+        X = np.asarray(Xtr[list(exogenas)], dtype=float)
+    except Exception:
         return {"estado": "rechazado", "causa": "exogena_desconocida",
                 "J": None, "aucs": []}
-    y = np.asarray(ytr, dtype=float)
-    X = np.asarray(Xtr[list(exogenas)], dtype=float)
     try:
         res = ARIMA(y, exog=X, order=(p, d, q),
                     enforce_stationarity=False,

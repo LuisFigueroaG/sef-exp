@@ -48,6 +48,10 @@ class Config:
     epsilon: float = 0.001
     etiqueta_y: str = "AUC medio de cinco folds"
     titulo_j: str = "J mediana en CV"
+    exogenas: tuple = ()
+    lags: tuple = (0,)
+    p_max: int = 3
+    q_max: int = 2
     evaluar_set: object = None
     preparar_fn: object = None
     bits_fn: object = None

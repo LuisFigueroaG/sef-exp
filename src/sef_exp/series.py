@@ -12,19 +12,28 @@ import polars as pl
 
 from sef_exp import fase3b
 from sef_exp.evaluador_series import (
-    EXOGENAS, decodificar, evaluar_serie, orden_diferencias,
+    EXOGENAS, evaluar_serie, orden_diferencias, parte_exogena,
 )
 from sef_exp.fase2 import ROOT
 
-FAMILIAS_SERIES = (
-    ("pq", tuple(f"p{p}q{q}" for p in range(4) for q in range(3))),
-    ("ipc", ("IPC",)),
-    ("tpm", ("TPM",)),
-    ("fx", ("DOLAR",)),
-    ("cobre", ("COBRE",)),
-    ("desempleo", ("DESEMPLEO",)),
-)
-P_MAX, Q_MAX = 3, 2
+
+def opciones_exogenas(exogenas, lags):
+    opciones = []
+    for e in exogenas:
+        for lag in lags:
+            opciones.append(e if lag == 0 else f"{e}_L{lag}")
+    return opciones
+
+
+def familias_series(exogenas, lags, p_max, q_max):
+    fams = [("pq", tuple(f"p{p}q{q}" for p in range(p_max + 1)
+                         for q in range(q_max + 1)))]
+    for e in exogenas:
+        fams.append((e.lower(), tuple(opciones_exogenas((e,), lags))))
+    return tuple(fams)
+
+
+FAMILIAS_SERIES = familias_series(EXOGENAS, (0,), 3, 2)
 
 
 def cargar_series():
@@ -38,23 +47,32 @@ def preparar_series(cfg):
     print(cfg.mensaje_catalogo, flush=True)
     start = time.monotonic()
     x, y = cfg.cargar()
-    if set(x.columns) != set(EXOGENAS):
+    if set(x.columns) != set(cfg.exogenas):
         raise RuntimeError("Las exogenas train no coinciden con el contrato")
-    medias = {c: x[c].mean() for c in EXOGENAS}
-    desvs = {c: x[c].std() or 1.0 for c in EXOGENAS}
-    xstd = x.with_columns(
-        ((pl.col(c) - medias[c]) / desvs[c]).alias(c) for c in EXOGENAS)
-    d = orden_diferencias(y)
+    max_lag = max(cfg.lags)
+    cols = {}
+    for e in cfg.exogenas:
+        for lag in cfg.lags:
+            nombre = e if lag == 0 else f"{e}_L{lag}"
+            cols[nombre] = x[e].shift(lag)
+    xl = pl.DataFrame(cols).slice(max_lag)
+    yl = np.asarray(y, dtype=float)[max_lag:]
+    medias = {c: xl[c].mean() for c in xl.columns}
+    desvs = {c: xl[c].std() or 1.0 for c in xl.columns}
+    xstd = xl.with_columns(
+        ((pl.col(c) - medias[c]) / desvs[c]).alias(c) for c in xl.columns)
+    d = orden_diferencias(yl)
     iv = {}
     for v in cfg.espacio.variables:
-        if v in EXOGENAS:
-            r = evaluar_serie(("p0q0", v, "TPM" if v != "TPM" else "IPC"),
-                              y, xstd, d)
-            iv[v] = r["J"] if r["J"] is not None else float("-inf")
-        else:
+        if v == "pq" or v.startswith("p"):
             iv[v] = 0.0
+            continue
+        base, _ = parte_exogena(v)
+        otra = next(e for e in cfg.exogenas if e != base)
+        r = evaluar_serie(("p0q0", v, otra), yl, xstd, d)
+        iv[v] = r["J"] if r["J"] is not None else float("-inf")
     print(f"d por KPSS={d} precompute={time.monotonic() - start:.1f}s", flush=True)
-    return (np.asarray(y, dtype=float), xstd, d), iv, time.monotonic() - start
+    return (yl, xstd, d), iv, time.monotonic() - start
 
 
 def evaluar_set_series(S, context, cfg):
@@ -63,23 +81,30 @@ def evaluar_set_series(S, context, cfg):
 
 
 def bits_series(S, cfg):
-    p, q, exogenas = decodificar(S)
-    return [int(e in exogenas) for e in EXOGENAS] + [p, q]
+    """One-hot sobre las opciones del espacio (pq + exogenas con lag).
+
+    Se probo con dummies por familia + p,q enteros, pero los triples
+    sin token pq (estructuralmente validos, siempre rechazados)
+    rompian la matriz del sustituto con largos distintos y Nones.
+    El one-hot es uniforme para todo lo que la bolsa propone.
+    """
+    selected = set(S)
+    return [int(v in selected) for v in cfg.espacio.variables]
 
 
-def vecinos_pq(p, q):
+def vecinos_pq(p, q, cfg):
     for dp, dq in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)):
         a, b = p + dp, q + dq
-        if 0 <= a <= P_MAX and 0 <= b <= Q_MAX:
+        if 0 <= a <= cfg.p_max and 0 <= b <= cfg.q_max:
             yield a, b
 
 
 def mejor_pq(exogenas, context, cfg, cache, ensayos):
     p, q = 0, 0
     mejor = None
-    for _ in range(12):
+    for _ in range(2 * (cfg.p_max + cfg.q_max + 2)):
         candidatos = []
-        for a, b in vecinos_pq(p, q):
+        for a, b in vecinos_pq(p, q, cfg):
             S = tuple(sorted((f"p{a}q{b}", *exogenas)))
             row, _ = cache.consulta(S, context)
             ensayos.add(S)
@@ -104,28 +129,37 @@ def hk_forward(context, iv, cfg):
     """
     cache = fase3b.Evaluaciones(cfg=cfg)
     ensayos = set()
+    opciones = [v for v in cfg.espacio.variables if not v.startswith("p")]
     ranking = sorted(
-        ((score, e) for e, score in iv.items() if e in EXOGENAS),
-        reverse=True)
-    elegidas = tuple(sorted(e for _, e in ranking[:2]))
+        ((iv[v], v) for v in opciones), reverse=True)
+    elegidas = []
+    for _, v in ranking:
+        if all(parte_exogena(v)[0] != parte_exogena(e)[0] for e in elegidas):
+            elegidas.append(v)
+        if len(elegidas) == 2:
+            break
+    elegidas = tuple(sorted(elegidas))
     local = mejor_pq(elegidas, context, cfg, cache, ensayos)
     if local is None:
         return None, None, len(ensayos)
     mejor = (local[0], elegidas, local[1], local[2])
     for _ in range(6):
-        opciones = []
+        candidatas = []
         for fuera in mejor[1]:
             for _, dentro in ranking:
                 if dentro in mejor[1]:
                     continue
-                exogenas = tuple(sorted(dentro if e == fuera else e
-                                        for e in mejor[1]))
+                resto = [e for e in mejor[1] if e != fuera]
+                if any(parte_exogena(dentro)[0] == parte_exogena(e)[0]
+                       for e in resto):
+                    continue
+                exogenas = tuple(sorted((dentro, *resto)))
                 local = mejor_pq(exogenas, context, cfg, cache, ensayos)
                 if local is not None:
-                    opciones.append((local[0], exogenas, local[1], local[2]))
-        if not opciones:
+                    candidatas.append((local[0], exogenas, local[1], local[2]))
+        if not candidatas:
             break
-        candidato = max(opciones)
+        candidato = max(candidatas)
         if candidato[0] <= mejor[0]:
             break
         mejor = candidato
@@ -166,6 +200,10 @@ CFG = fase3b.Config(
     epsilon=2.0,
     etiqueta_y="-AICc en train",
     titulo_j="Mediana de -AICc",
+    exogenas=EXOGENAS,
+    lags=(0,),
+    p_max=3,
+    q_max=2,
     datos=(ROOT / "data/series/X_train.csv", ROOT / "data/series/y_train.csv"),
     codigo=(
         ROOT / "src/sef_exp/espacio.py",

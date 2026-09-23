@@ -21,7 +21,7 @@ CRUDO = ROOT / "data/series/crudo"
 OUT = ROOT / "data/series"
 
 MENSUALES = ("imacec", "ipc", "tasa_desempleo")
-MEDIA_DIARIA = ("dolar", "libra_cobre")
+MEDIA_DIARIA = ("dolar", "libra_cobre", "uf", "euro")
 ULTIMO_DIARIO = ("tpm",)
 INDICADORES = (*MENSUALES, *MEDIA_DIARIA, *ULTIMO_DIARIO)
 ANIOS = range(2013, 2027)
@@ -67,12 +67,15 @@ def main():
     if any(nulos.values()):
         raise RuntimeError(f"Huecos en la ventana comun: {nulos}")
     nombres = {"imacec": "IMACEC", "ipc": "IPC", "tasa_desempleo": "DESEMPLEO",
-               "dolar": "DOLAR", "libra_cobre": "COBRE", "tpm": "TPM"}
+               "dolar": "DOLAR", "libra_cobre": "COBRE", "tpm": "TPM",
+               "uf": "UF", "euro": "EURO"}
     base = base.rename(nombres)
     tr, te = base.slice(0, base.height - TEST_MESES), base.slice(-TEST_MESES)
     for nombre, parte in (("train", tr), ("test", te)):
-        x = parte.select(["mes", "IPC", "TPM", "DOLAR", "COBRE", "DESEMPLEO"])
-        x.columns = ["", "IPC", "TPM", "DOLAR", "COBRE", "DESEMPLEO"]
+        x = parte.select(["mes", *[c for c in parte.columns
+                                    if c not in ("mes", "IMACEC")]])
+        x.columns = ["", *[c for c in parte.columns
+                            if c not in ("mes", "IMACEC")]]
         x.write_csv(OUT / f"X_{nombre}.csv")
         y = parte.select(["mes", "IMACEC"])
         y.columns = ["", "target"]

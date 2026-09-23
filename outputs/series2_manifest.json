@@ -1,0 +1,151 @@
+{
+  "evaluador": {
+    "datos_y_evaluador_sha256": "a9866117a5f2cd7538cf2b267b82f7c32d35e66fbfcb8d213a15ebcce53fa89e",
+    "fold_seed": 42,
+    "k": 3,
+    "iv_min": 0.1,
+    "corr_max": 0.7,
+    "vif_max": 5.0,
+    "bin_cfg": {
+      "dtype": "numerical",
+      "solver": "cp",
+      "max_n_bins": 5,
+      "min_prebin_size": 0.05
+    },
+    "metrica": "-AICc",
+    "d": "KPSS repetidos en train",
+    "exogenas": "z-score en train",
+    "lags": "0,1,3 (train pierde 3 meses de cabeza)"
+  },
+  "familias": [
+    [
+      "pq",
+      [
+        "p0q0",
+        "p0q1",
+        "p0q2",
+        "p0q3",
+        "p1q0",
+        "p1q1",
+        "p1q2",
+        "p1q3",
+        "p2q0",
+        "p2q1",
+        "p2q2",
+        "p2q3",
+        "p3q0",
+        "p3q1",
+        "p3q2",
+        "p3q3",
+        "p4q0",
+        "p4q1",
+        "p4q2",
+        "p4q3",
+        "p5q0",
+        "p5q1",
+        "p5q2",
+        "p5q3"
+      ]
+    ],
+    [
+      "ipc",
+      [
+        "IPC",
+        "IPC_L1",
+        "IPC_L3"
+      ]
+    ],
+    [
+      "tpm",
+      [
+        "TPM",
+        "TPM_L1",
+        "TPM_L3"
+      ]
+    ],
+    [
+      "dolar",
+      [
+        "DOLAR",
+        "DOLAR_L1",
+        "DOLAR_L3"
+      ]
+    ],
+    [
+      "cobre",
+      [
+        "COBRE",
+        "COBRE_L1",
+        "COBRE_L3"
+      ]
+    ],
+    [
+      "desempleo",
+      [
+        "DESEMPLEO",
+        "DESEMPLEO_L1",
+        "DESEMPLEO_L3"
+      ]
+    ],
+    [
+      "uf",
+      [
+        "UF",
+        "UF_L1",
+        "UF_L3"
+      ]
+    ],
+    [
+      "euro",
+      [
+        "EURO",
+        "EURO_L1",
+        "EURO_L3"
+      ]
+    ]
+  ],
+  "espacio_estructural": 5481,
+  "metodos": [
+    "aleatorio",
+    "local",
+    "ga_local",
+    "sef_completo"
+  ],
+  "semillas": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+  ],
+  "presupuestos": [
+    100,
+    250,
+    500,
+    1000
+  ],
+  "codigo_sha256": "e39ba4ee9d2f237378178f00ef8d058c0d5449101cbd5d0f7c581e090bfda4ae",
+  "versiones": {
+    "numpy": "2.5.3",
+    "scipy": "1.18.1",
+    "scikit-learn": "1.9.1",
+    "optbinning": "1.0.0",
+    "polars": "1.44.2",
+    "plotly": "7.1.0"
+  }
+}
