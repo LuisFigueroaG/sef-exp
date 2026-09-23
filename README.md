@@ -2,7 +2,9 @@
 
 Experimento de seleccion de variables para scorecards con busqueda evolutiva y restricciones.
 
-Estado: evaluador comun y fase 2 completados. Resultados en `docs/fase2-resultados.md`. Este repo es solo investigacion y experimentacion, no libreria.
+Estado: fases 1 a 3 completadas. Resultados en `docs/fase2-resultados.md`
+y `docs/fase3-resultados.md`. El test reservado sigue cerrado. Este repo
+es solo investigacion y experimentacion, no libreria.
 
 ## Objetivo
 
@@ -38,13 +40,16 @@ uv sync
 uv run python -c "import sef_exp; print('ok')"
 uv run python -m sef_exp.fase2 --solo-oraculo
 uv run python -m sef_exp.fase2
+uv run python -m sef_exp.fase3
+uv run python -m sef_exp.fase3 --solo-graficos
 ```
 
 ## Roadmap
 
 1. Contrato del problema y evaluador comun con folds y semillas fijas
 2. Oraculo exhaustivo chico con aleatorio, forward e intercambios. Ver `docs/fase2.md`.
-3. Genetico por familias, luego mejora local y sustituto, con ablaciones
+3. Genetico por familias, mejora local y sustituto, con ablaciones. Ver `docs/fase3.md`.
 4. Generalizacion con test reservado; sin cortes temporales porque los CSV no tienen fecha
 
-La superioridad queda abierta hasta completar experimentos.
+En el subespacio de fase 2, el local simple sigue siendo la referencia
+mas fuerte a presupuesto bajo. El SEF no demostro superioridad general.

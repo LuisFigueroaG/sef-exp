@@ -1,0 +1,130 @@
+{
+  "phase2_sha256": "5dea8a2e0186cfe3caad495725969342cff89c3ac8e42baf3ad3dd5396f62c75",
+  "fase3_codigo_sha256": "289916dd8c36ffcfb4022a6f17e429df205ca250c52935d052fbee99a0188478",
+  "variantes": [
+    {
+      "name": "ga_basico",
+      "local": false,
+      "surrogate": false,
+      "doubles": true,
+      "restart": true,
+      "guided": true,
+      "repair": true
+    },
+    {
+      "name": "ga_local",
+      "local": true,
+      "surrogate": false,
+      "doubles": true,
+      "restart": true,
+      "guided": true,
+      "repair": true
+    },
+    {
+      "name": "sef_completo",
+      "local": true,
+      "surrogate": true,
+      "doubles": true,
+      "restart": true,
+      "guided": true,
+      "repair": true
+    },
+    {
+      "name": "sef_sin_local",
+      "local": false,
+      "surrogate": true,
+      "doubles": true,
+      "restart": true,
+      "guided": true,
+      "repair": true
+    },
+    {
+      "name": "sef_sin_dobles",
+      "local": true,
+      "surrogate": true,
+      "doubles": false,
+      "restart": true,
+      "guided": true,
+      "repair": true
+    },
+    {
+      "name": "sef_sin_reinicios",
+      "local": true,
+      "surrogate": true,
+      "doubles": true,
+      "restart": false,
+      "guided": true,
+      "repair": true
+    },
+    {
+      "name": "sef_sin_guiada",
+      "local": true,
+      "surrogate": true,
+      "doubles": true,
+      "restart": true,
+      "guided": false,
+      "repair": true
+    },
+    {
+      "name": "sef_sin_reparacion",
+      "local": true,
+      "surrogate": true,
+      "doubles": true,
+      "restart": true,
+      "guided": true,
+      "repair": false
+    }
+  ],
+  "semillas": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+  ],
+  "presupuestos": [
+    100,
+    250,
+    500,
+    1000,
+    2000
+  ],
+  "lote": 16,
+  "poblacion": 64,
+  "elite": 8,
+  "pool": {
+    "genetico": 96,
+    "aleatorio": 16,
+    "local": 16
+  },
+  "sustituto": {
+    "arboles": 32,
+    "min_leaf": 2,
+    "max_features": 0.8,
+    "cada_lotes": 4,
+    "min_factibles": 64
+  },
+  "versiones": {
+    "numpy": "2.5.3",
+    "scipy": "1.18.1",
+    "scikit-learn": "1.9.1",
+    "optbinning": "1.0.0",
+    "polars": "1.44.2",
+    "plotly": "7.1.0"
+  }
+}
