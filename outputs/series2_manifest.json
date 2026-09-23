@@ -1,6 +1,6 @@
 {
   "evaluador": {
-    "datos_y_evaluador_sha256": "a9866117a5f2cd7538cf2b267b82f7c32d35e66fbfcb8d213a15ebcce53fa89e",
+    "datos_y_evaluador_sha256": "393eefb3d8721e66eab333303b3ad571cbd218110fb296af35325bed64b8fe65",
     "fold_seed": 42,
     "k": 3,
     "iv_min": 0.1,
@@ -140,7 +140,7 @@
     1000,
     2000
   ],
-  "codigo_sha256": "a312f5151ab1d21d64a6086f505ec22249a1ca139dade230d5f8d9088800d8a4",
+  "codigo_sha256": "911219759a9aabc3e08446c21cefab8fd661fcce10861feccee2c1015e0b3f23",
   "versiones": {
     "numpy": "2.5.3",
     "scipy": "1.18.1",
