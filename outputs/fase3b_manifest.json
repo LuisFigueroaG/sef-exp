@@ -1,0 +1,233 @@
+{
+  "evaluador": {
+    "datos_y_evaluador_sha256": "73ef43fdcbfa572aae4ebbce5aa83b6549ab90726b8bd3377572cb4dbb103e9b",
+    "fold_seed": 42,
+    "k": 6,
+    "iv_min": 0.1,
+    "corr_max": 0.7,
+    "vif_max": 5.0,
+    "bin_cfg": {
+      "dtype": "numerical",
+      "solver": "cp",
+      "max_n_bins": 5,
+      "min_prebin_size": 0.05
+    }
+  },
+  "familias": [
+    [
+      "scores",
+      [
+        "CVSC100",
+        "CVSC150"
+      ]
+    ],
+    [
+      "satisfactorias_total",
+      [
+        "AM03",
+        "AT03"
+      ]
+    ],
+    [
+      "satisfactorias_atrasos",
+      [
+        "AM133"
+      ]
+    ],
+    [
+      "satisfactorias_3m",
+      [
+        "AM23",
+        "AT23"
+      ]
+    ],
+    [
+      "satisfactorias_6m",
+      [
+        "AM24"
+      ]
+    ],
+    [
+      "satisfactorias_18m",
+      [
+        "AM26"
+      ]
+    ],
+    [
+      "satisfactorias_24m",
+      [
+        "AT27"
+      ]
+    ],
+    [
+      "cuentas_totales",
+      [
+        "AT01",
+        "AM01",
+        "CVPRTRD"
+      ]
+    ],
+    [
+      "cuentas_no_hipotecarias",
+      [
+        "CVPRNONMTTRD"
+      ]
+    ],
+    [
+      "cuentas_saldo_cero",
+      [
+        "AT30"
+      ]
+    ],
+    [
+      "antiguedad_media_cuentas",
+      [
+        "GO12"
+      ]
+    ],
+    [
+      "antiguedad_media_tarjetas",
+      [
+        "BC58"
+      ]
+    ],
+    [
+      "antiguedad_cuentas",
+      [
+        "AT93",
+        "AM20",
+        "AT20"
+      ]
+    ],
+    [
+      "antiguedad_cuotas",
+      [
+        "IN20"
+      ]
+    ],
+    [
+      "consultas_6m",
+      [
+        "GO06"
+      ]
+    ],
+    [
+      "consultas_24m",
+      [
+        "GO243"
+      ]
+    ],
+    [
+      "consultas_12m_sin_duplicados",
+      [
+        "CVSSG990S"
+      ]
+    ],
+    [
+      "consultas_totales",
+      [
+        "GO04",
+        "CVSSG960S"
+      ]
+    ],
+    [
+      "consultas_no_auto",
+      [
+        "GO158"
+      ]
+    ],
+    [
+      "pagos",
+      [
+        "CVPRPAYMNT11"
+      ]
+    ],
+    [
+      "disminucion_saldo",
+      [
+        "CVPRTRV10"
+      ]
+    ],
+    [
+      "gasto_revolvente",
+      [
+        "CVPRRVDEXQ4"
+      ]
+    ],
+    [
+      "revolventes_satisfactorios",
+      [
+        "RE03"
+      ]
+    ],
+    [
+      "saldo_maximo_tarjeta",
+      [
+        "BC111"
+      ]
+    ],
+    [
+      "cobranzas_numero",
+      [
+        "PR09"
+      ]
+    ],
+    [
+      "cobranzas_impagas_36m",
+      [
+        "PR95"
+      ]
+    ],
+    [
+      "cobranzas_recencia",
+      [
+        "PR12"
+      ]
+    ]
+  ],
+  "espacio_estructural": 1251023,
+  "metodos": [
+    "aleatorio",
+    "local",
+    "ga_local",
+    "sef_completo"
+  ],
+  "semillas": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+  ],
+  "presupuestos": [
+    100,
+    250,
+    500,
+    1000,
+    2000
+  ],
+  "codigo_sha256": "c89892e12f5e2391f227f581c74bbd3c98b328c802185f77414ad0c52c3e3811",
+  "versiones": {
+    "numpy": "2.5.3",
+    "scipy": "1.18.1",
+    "scikit-learn": "1.9.1",
+    "optbinning": "1.0.0",
+    "polars": "1.44.2",
+    "plotly": "7.1.0"
+  }
+}

@@ -636,6 +636,24 @@ def calcular_metricas():
     return metrics
 
 
+def referencia_forward():
+    """Forward greedy de fase 2 como referencia descriptiva.
+
+    Comparte subespacio, evaluador y folds con esta fase, asi que su J
+    es comparable. No tiene presupuesto por trials: linea horizontal.
+    Devuelve (brecha_en_milesimas, J, ensayos).
+    """
+    with (ROOT / "outputs/fase2_resumen.csv").open(newline="") as f:
+        rows = [r for r in csv.DictReader(f) if r["metodo"] == "forward"]
+    if not rows:
+        raise RuntimeError("Falta el baseline forward de fase 2")
+    J = max(float(r["mejor_J"]) for r in rows if r["mejor_J"])
+    ensayos = max(int(r["trials_reales"]) for r in rows)
+    oracle = leer_oraculo(catalogo())
+    optimum = max(float(row["J"]) for row in oracle.values() if row["J"])
+    return 1000 * (optimum - J), J, ensayos
+
+
 def graficar(metrics):
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
@@ -659,6 +677,12 @@ def graficar(metrics):
             ), row=1, col=col)
     fig.update_xaxes(title_text="Trials unicos evaluados", tickvals=[100, 250, 500, 1000, 1792])
     fig.update_yaxes(title_text="Brecha (milesimas de AUC)", rangemode="tozero", row=1, col=1)
+    brecha_ref, _, ensayos_ref = referencia_forward()
+    fig.add_trace(go.Scatter(
+        x=[100, 1792], y=[brecha_ref, brecha_ref], mode="lines",
+        name=f"forward (referencia, {ensayos_ref} ensayos)",
+        line={"color": "#888888", "dash": "dash", "width": 2},
+    ), row=1, col=1)
     fig.update_yaxes(title_text="Fraccion de corridas", range=[0, 1.05], row=1, col=2)
     fig.update_layout(width=1400, height=570, template="plotly_white",
                       margin={"l": 75, "r": 35, "t": 70, "b": 90},

@@ -12,6 +12,7 @@ from sef_exp.fase3 import (
     crossover,
     leer_oraculo,
     mutate,
+    referencia_forward,
     run_variant,
 )
 
@@ -62,6 +63,13 @@ class OperatorsTests(unittest.TestCase):
         self.assertTrue(any(r["pred_J"] for r in trials))
         _, no_repair = self.run_short(VARIANTES[-1], 1, 250)
         self.assertGreater(int(no_repair[1]["estructurales_rechazados"]), 0)
+
+    def test_referencia_forward_comparte_oraculo(self):
+        brecha, J, ensayos = referencia_forward()
+        self.assertGreaterEqual(brecha, 0.0)
+        self.assertEqual(ensayos, 66)
+        self.assertAlmostEqual(
+            J, self.optimum - brecha / 1000, places=12)
 
 
 if __name__ == "__main__":

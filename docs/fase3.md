@@ -94,7 +94,10 @@ Las comparaciones principales son brecha al oraculo, tasa de llegada al
 optimo y a epsilon 0,005, 0,002 y 0,001, trials unicos, propuestas totales,
 rechazos, tiempo estimado de modelo, tiempo de algoritmo y diversidad.
 Se comparan ademas con aleatorio y local de fase 2 a igual presupuesto y
-semilla. Las 20 semillas son repeticiones del optimizador sobre una sola
+semilla. El forward greedy de fase 2 aparece como linea de referencia
+punteada en la figura de brecha: comparte subespacio, evaluador y folds
+con esta fase, pero no tiene presupuesto por trials (66 ensayos,
+determinista). Las 20 semillas son repeticiones del optimizador sobre una sola
 tarea; no se trataran como 20 datasets independientes.
 
 La decision de conservar sustituto o reparacion depende del rendimiento
