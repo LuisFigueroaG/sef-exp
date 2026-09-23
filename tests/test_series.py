@@ -37,7 +37,7 @@ class SeriesTests(unittest.TestCase):
     def test_series2_espacio_ampliado(self):
         self.assertEqual(len(CFG2.espacio.familias), 8)
         self.assertEqual(CFG2.espacio.total, 5481)
-        self.assertEqual(CFG2.presupuestos, (100, 250, 500, 1000))
+        self.assertEqual(CFG2.presupuestos, (100, 250, 500, 1000, 2000))
         self.assertEqual(CFG2.exogenas, EXOGENAS2)
         self.assertEqual(CFG2.lags, LAGS2)
         fams = familias_series(EXOGENAS2, LAGS2, 5, 3)

@@ -27,7 +27,9 @@ en el manifiesto).
 Metodos: aleatorio, local, ga_local y sef_completo, mas
 `hk_forward` (greedy con intercambios simples respetando una
 familia por pick, (p,q) re-entonado en cada evaluacion).
-Presupuestos 100, 250, 500 y 1000 trials unicos; 20 semillas.
+Presupuestos 100, 250, 500, 1000 y 2000 trials unicos (2000
+agregado post-hoc para verificar si aleatorio alcanza: a 1000 iba
+18/20); 20 semillas.
 Epsilon 2 puntos AICc para la fraccion de cercania. El sustituto
 usa 7 dummies + 2 lags + p,q enteros.
 

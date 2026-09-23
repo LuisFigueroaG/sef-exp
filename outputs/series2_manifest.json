@@ -137,9 +137,10 @@
     100,
     250,
     500,
-    1000
+    1000,
+    2000
   ],
-  "codigo_sha256": "e39ba4ee9d2f237378178f00ef8d058c0d5449101cbd5d0f7c581e090bfda4ae",
+  "codigo_sha256": "a312f5151ab1d21d64a6086f505ec22249a1ca139dade230d5f8d9088800d8a4",
   "versiones": {
     "numpy": "2.5.3",
     "scipy": "1.18.1",
