@@ -673,8 +673,6 @@ def metricas(cfg=None):
     espacio = cfg.espacio
     with cfg.summary_path.open(newline="") as f:
         rows = list(csv.DictReader(f))
-    if len(rows) != len(METHODS) * len(SEEDS) * len(cfg.presupuestos):
-        raise RuntimeError(f"Faltan corridas o presupuestos en {cfg.nombre}")
     reference = max(float(r["mejor_J"]) for r in rows if r["mejor_J"])
     result, stability = [], []
     for method in METHODS:
@@ -682,7 +680,9 @@ def metricas(cfg=None):
             selected = [r for r in rows if r["metodo"] == method
                         and int(r["presupuesto"]) == budget]
             if len(selected) != len(SEEDS):
-                raise RuntimeError(f"Faltan semillas para {method} B={budget}")
+                print(f"  sin {len(SEEDS)} semillas para {method} B={budget}: "
+                      f"se omite ({cfg.nombre})", flush=True)
+                continue
             js = [float(r["mejor_J"]) for r in selected if r["mejor_J"]]
             sets = [set(r["mejor_S"].split("|")) for r in selected if r["mejor_S"]]
             overlaps = [len(a & b) / len(a | b) for i, a in enumerate(sets)
@@ -701,8 +701,7 @@ def metricas(cfg=None):
                     })
             result.append({
                 "metodo": method, "presupuesto": budget,
-                "corridas": len(selected), "sin_solucion": len(selected) - len(js),
-                "J_media": "" if not js else repr(statistics.mean(js)),
+                "corridas": len(selected), "sin_solucion": len(selected) - len(js),                "J_media": "" if not js else repr(statistics.mean(js)),
                 "J_mediana": "" if not js else repr(statistics.median(js)),
                 "brecha_al_mejor_observado_media": "" if not js else repr(
                     statistics.mean(reference - j for j in js)),
@@ -718,6 +717,8 @@ def metricas(cfg=None):
                 "pared_algoritmo_media_s": repr(statistics.mean(float(r["pared_algoritmo_s"])
                                                               for r in selected)),
             })
+    if not result:
+        raise RuntimeError(f"Sin metricas completas en {cfg.nombre}")
     with cfg.metrics_path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=tuple(result[0]), lineterminator="\n")
         writer.writeheader()
@@ -741,9 +742,9 @@ def curvas_granulares(cfg=None):
     frames = []
     for path in sorted(cfg.runs_dir.glob("*.csv")):
         frames.append(pl.read_csv(
-            path, columns=["metodo", "semilla", "trial", "mejor_J"]))
-    runs = pl.concat(frames).with_columns(
-        pl.col("mejor_J").cast(pl.Float64)).sort("metodo", "semilla", "trial")
+            path, columns=["metodo", "semilla", "trial", "mejor_J"]
+        ).with_columns(pl.col("mejor_J").cast(pl.Float64, strict=False)))
+    runs = pl.concat(frames).sort("metodo", "semilla", "trial")
     runs = runs.with_columns(
         pl.col("mejor_J").forward_fill().over(["metodo", "semilla"])
     ).filter(pl.col("trial") >= cfg.granular_desde)

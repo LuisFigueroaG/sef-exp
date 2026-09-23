@@ -1,0 +1,141 @@
+{
+  "evaluador": {
+    "datos_y_evaluador_sha256": "1faae2590715e6641de35f4293af541cdd1346ef95508a5720c06591e81564a7",
+    "fold_seed": 42,
+    "k": 2,
+    "iv_min": 0.02,
+    "corr_max": 0.7,
+    "vif_max": 5.0,
+    "bin_cfg": {
+      "dtype": "numerical",
+      "solver": "cp",
+      "max_n_bins": 5,
+      "min_prebin_size": 0.05
+    }
+  },
+  "familias": [
+    [
+      "cupo",
+      [
+        "LIMIT_BAL"
+      ]
+    ],
+    [
+      "sexo",
+      [
+        "SEX"
+      ]
+    ],
+    [
+      "educacion",
+      [
+        "EDUCATION"
+      ]
+    ],
+    [
+      "estado_civil",
+      [
+        "MARRIAGE"
+      ]
+    ],
+    [
+      "edad",
+      [
+        "AGE"
+      ]
+    ],
+    [
+      "pago_reciente",
+      [
+        "PAY_0",
+        "PAY_2",
+        "PAY_3"
+      ]
+    ],
+    [
+      "pago_antiguo",
+      [
+        "PAY_4",
+        "PAY_5",
+        "PAY_6"
+      ]
+    ],
+    [
+      "facturacion_reciente",
+      [
+        "BILL_AMT1",
+        "BILL_AMT2",
+        "BILL_AMT3"
+      ]
+    ],
+    [
+      "facturacion_antigua",
+      [
+        "BILL_AMT4",
+        "BILL_AMT5",
+        "BILL_AMT6"
+      ]
+    ],
+    [
+      "monto_reciente",
+      [
+        "PAY_AMT1",
+        "PAY_AMT2",
+        "PAY_AMT3"
+      ]
+    ],
+    [
+      "monto_antiguo",
+      [
+        "PAY_AMT4",
+        "PAY_AMT5",
+        "PAY_AMT6"
+      ]
+    ]
+  ],
+  "espacio_estructural": 235,
+  "metodos": [
+    "aleatorio",
+    "local",
+    "ga_local",
+    "sef_completo"
+  ],
+  "semillas": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+  ],
+  "presupuestos": [
+    100,
+    250,
+    500,
+    1000,
+    2000
+  ],
+  "codigo_sha256": "b39e0b502cf64f886da1d072ee09e17e1902c705d33507e1e482058ab6ff665a",
+  "versiones": {
+    "numpy": "2.5.3",
+    "scipy": "1.18.1",
+    "scikit-learn": "1.9.1",
+    "optbinning": "1.0.0",
+    "polars": "1.44.2",
+    "plotly": "7.1.0"
+  }
+}
