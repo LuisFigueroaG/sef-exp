@@ -13,6 +13,7 @@ dependencies = [
   "optbinning>=1.0.0",
   "kaleido>=1.4,<2",
   "statsmodels>=0.15.0",
+  "optuna>=5.0.0",
 ]
 
 [tool.ruff]
@@ -21,6 +22,13 @@ line-length = 100
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "ruff>=0.16.8",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sef_exp"]
