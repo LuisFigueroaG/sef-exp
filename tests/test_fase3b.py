@@ -41,7 +41,7 @@ class EspacioTests(unittest.TestCase):
 
 class FakeCache:
     def consulta(self, S, context):
-        score = 0.6 + sum(SPACE.variables.index(v) for v in S) / 10000
+        score = 0.6 + (abs(hash(S)) % 10000) / 100000
         return {"estado": "ok", "causa": "", "J": repr(score),
                 "aucs": "[]", "pared_s": "0.001"}, False
 
@@ -65,6 +65,24 @@ class SearchTests(unittest.TestCase):
             self.assertEqual(summaries[0]["presupuesto"], 100)
             if method == "sef_completo":
                 self.assertGreater(int(summaries[0]["ajustes_sustituto"]), 0)
+
+    def test_espacio_chico_termina_sin_bucle(self):
+        toy = Espacio((("a", ("a1", "a2")), ("b", ("b1",)),
+                       ("c", ("c1", "c2"))), k=2)
+        self.assertEqual(toy.total, 8)
+        stub = SimpleNamespace(espacio=toy, presupuestos=(4, 8), bits_fn=None)
+        for method in ("aleatorio", "local", "ga_local", "sef_completo"):
+            output = io.StringIO()
+            writer = csv.DictWriter(output, fieldnames=TRIAL_COLUMNS, lineterminator="\n")
+            writer.writeheader()
+            global_best = {"J": None, "S": None, "metodo": None, "semilla": None}
+            with redirect_stdout(io.StringIO()):
+                run_method(method, 0, 8, None,
+                           {v: 0.2 for v in toy.variables}, FakeCache(),
+                           writer, global_best, stub)
+            rows = list(csv.DictReader(io.StringIO(output.getvalue())))
+            self.assertEqual(len(rows), 8)
+            self.assertEqual(len({r["S"] for r in rows}), 8)
 
     def test_metricas_y_estabilidad_completas(self):
         with tempfile.TemporaryDirectory() as folder:

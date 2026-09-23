@@ -47,8 +47,9 @@ def preparar_series(cfg):
     print(cfg.mensaje_catalogo, flush=True)
     start = time.monotonic()
     x, y = cfg.cargar()
-    if set(x.columns) != set(cfg.exogenas):
-        raise RuntimeError("Las exogenas train no coinciden con el contrato")
+    if not set(cfg.exogenas) <= set(x.columns):
+        raise RuntimeError("Faltan exogenas del contrato en train")
+    x = x.select(list(cfg.exogenas))
     max_lag = max(cfg.lags)
     cols = {}
     for e in cfg.exogenas:
@@ -121,11 +122,11 @@ def mejor_pq(exogenas, context, cfg, cache, ensayos):
     return mejor
 
 
-def hk_forward(context, iv, cfg):
+def hk_forward(context, iv, cfg, n_exogenas=2):
     """Greedy sobre exogenas con (p,q) re-entonado por paso HK local.
 
-    Arranca del mejor par univariado y prueba intercambios simples.
-    Determinista, sin presupuesto: referencia descriptiva.
+    Arranca del mejor conjunto univariado y prueba intercambios
+    simples. Determinista, sin presupuesto: referencia descriptiva.
     """
     cache = fase3b.Evaluaciones(cfg=cfg)
     ensayos = set()
@@ -136,14 +137,14 @@ def hk_forward(context, iv, cfg):
     for _, v in ranking:
         if all(parte_exogena(v)[0] != parte_exogena(e)[0] for e in elegidas):
             elegidas.append(v)
-        if len(elegidas) == 2:
+        if len(elegidas) == n_exogenas:
             break
     elegidas = tuple(sorted(elegidas))
     local = mejor_pq(elegidas, context, cfg, cache, ensayos)
     if local is None:
         return None, None, len(ensayos)
     mejor = (local[0], elegidas, local[1], local[2])
-    for _ in range(6):
+    for _ in range(3 * (n_exogenas + 1)):
         candidatas = []
         for fuera in mejor[1]:
             for _, dentro in ranking:
@@ -167,12 +168,12 @@ def hk_forward(context, iv, cfg):
     return J, tuple(sorted((f"p{p}q{q}", *elegidas))), len(ensayos)
 
 
-def calcular_hk(cfg):
+def calcular_hk(cfg, n_exogenas=2):
     previos = fase3b.aplicar_umbrales(cfg)
     try:
         context, iv, _ = (cfg.preparar_fn or fase3b.preparar)(cfg)
         t = time.monotonic()
-        J, S, ensayos = hk_forward(context, iv, cfg)
+        J, S, ensayos = hk_forward(context, iv, cfg, n_exogenas)
         modelo = time.monotonic() - t
     finally:
         fase3b.restaurar_umbrales(previos)

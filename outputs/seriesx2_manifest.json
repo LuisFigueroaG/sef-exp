@@ -1,0 +1,124 @@
+{
+  "evaluador": {
+    "datos_y_evaluador_sha256": "393eefb3d8721e66eab333303b3ad571cbd218110fb296af35325bed64b8fe65",
+    "fold_seed": 42,
+    "k": 3,
+    "iv_min": 0.1,
+    "corr_max": 0.7,
+    "vif_max": 5.0,
+    "bin_cfg": {
+      "dtype": "numerical",
+      "solver": "cp",
+      "max_n_bins": 5,
+      "min_prebin_size": 0.05
+    },
+    "metrica": "-AICc",
+    "d": "KPSS en train",
+    "n_exogenas": 2
+  },
+  "familias": [
+    [
+      "pq",
+      [
+        "p0q0",
+        "p0q1",
+        "p0q2",
+        "p1q0",
+        "p1q1",
+        "p1q2",
+        "p2q0",
+        "p2q1",
+        "p2q2",
+        "p3q0",
+        "p3q1",
+        "p3q2"
+      ]
+    ],
+    [
+      "ipc",
+      [
+        "IPC"
+      ]
+    ],
+    [
+      "tpm",
+      [
+        "TPM"
+      ]
+    ],
+    [
+      "dolar",
+      [
+        "DOLAR"
+      ]
+    ],
+    [
+      "cobre",
+      [
+        "COBRE"
+      ]
+    ],
+    [
+      "desempleo",
+      [
+        "DESEMPLEO"
+      ]
+    ],
+    [
+      "uf",
+      [
+        "UF"
+      ]
+    ],
+    [
+      "euro",
+      [
+        "EURO"
+      ]
+    ]
+  ],
+  "espacio_estructural": 287,
+  "metodos": [
+    "aleatorio",
+    "local",
+    "ga_local",
+    "sef_completo"
+  ],
+  "semillas": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+  ],
+  "presupuestos": [
+    25,
+    50,
+    75,
+    100
+  ],
+  "codigo_sha256": "83cfa6b8f6db827a79256ea1dd2fa0dc1922bcc450a4f160693cff8e81bb8553",
+  "versiones": {
+    "numpy": "2.5.3",
+    "scipy": "1.18.1",
+    "scikit-learn": "1.9.1",
+    "optbinning": "1.0.0",
+    "polars": "1.44.2",
+    "plotly": "7.1.0"
+  }
+}

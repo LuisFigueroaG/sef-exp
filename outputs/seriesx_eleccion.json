@@ -1,0 +1,37 @@
+{
+  "epsilon": 2.0,
+  "techo": -548.2293442991212,
+  "elegido": 2,
+  "por_n": {
+    "0": {
+      "presupuesto": 19,
+      "mediana_max_metodos": -557.9689855509397,
+      "mejor_J": -557.9689855509397
+    },
+    "1": {
+      "presupuesto": 100,
+      "mediana_max_metodos": -551.7990477414885,
+      "mejor_J": -551.7990477414885
+    },
+    "2": {
+      "presupuesto": 100,
+      "mediana_max_metodos": -549.0535808233103,
+      "mejor_J": -549.0535808233103
+    },
+    "3": {
+      "presupuesto": 100,
+      "mediana_max_metodos": -548.2293442991212,
+      "mejor_J": -548.2293442991212
+    },
+    "4": {
+      "presupuesto": 100,
+      "mediana_max_metodos": -549.5523086399784,
+      "mejor_J": -549.5523086399784
+    },
+    "5": {
+      "presupuesto": 100,
+      "mediana_max_metodos": -551.8364173088718,
+      "mejor_J": -551.8364173088718
+    }
+  }
+}

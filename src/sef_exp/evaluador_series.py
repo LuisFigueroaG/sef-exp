@@ -56,16 +56,19 @@ def fuera_circulo(raices):
     return all(abs(r) > 1.0 for r in np.atleast_1d(raices))
 
 
-def evaluar_serie(S, ytr, Xtr, d):
+def evaluar_serie(S, ytr, Xtr, d, max_exogenas=5):
     p, q, exogenas = decodificar(S)
-    if p is None or q is None or len(exogenas) != 2:
+    if p is None or q is None or len(exogenas) > max_exogenas:
         return {"estado": "rechazado", "causa": "estructura", "J": None, "aucs": []}
     y = np.asarray(ytr, dtype=float)
-    try:
-        X = np.asarray(Xtr[list(exogenas)], dtype=float)
-    except Exception:
-        return {"estado": "rechazado", "causa": "exogena_desconocida",
-                "J": None, "aucs": []}
+    if exogenas:
+        try:
+            X = np.asarray(Xtr[list(exogenas)], dtype=float)
+        except Exception:
+            return {"estado": "rechazado", "causa": "exogena_desconocida",
+                    "J": None, "aucs": []}
+    else:
+        X = None
     try:
         res = ARIMA(y, exog=X, order=(p, d, q),
                     enforce_stationarity=False,

@@ -451,13 +451,16 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best,
 
     elif method in ("ga_local", "sef_completo"):
         initial = {}
-        while len(initial) < 48:
+        init_random = min(48, espacio.total)
+        while len(initial) < init_random:
             offer(espacio.muestra(rng_init), "init_random", initial)
         for _ in range(2048):
-            if len(initial) >= POPULATION_SIZE:
+            if len(initial) >= min(POPULATION_SIZE, espacio.total):
                 break
             offer(espacio.guiada(iv, rng_guided), "init_iv", initial)
-        while len(initial) < POPULATION_SIZE:
+        intentos = 0
+        while len(initial) < min(POPULATION_SIZE, espacio.total) and intentos < 4096:
+            intentos += 1
             offer(espacio.muestra(rng_init), "init_random", initial)
         for S, source in initial.items():
             if len(archive) >= limit:
@@ -557,10 +560,17 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best,
             leftovers = [S for S in bag if S not in selected]
             rng_gen.shuffle(leftovers)
             take(leftovers, BATCH_SIZE - len(selected))
-            while len(selected) < min(BATCH_SIZE, limit - len(archive)):
+            intentos = 0
+            while (len(selected) < min(BATCH_SIZE, limit - len(archive))
+                   and intentos < 4096):
+                intentos += 1
                 S = espacio.muestra(rng_random)
                 if offer(S, "respaldo", bag):
                     selected.append(S)
+            if not selected:
+                print(f"  {method} s={seed} bolsa agotada con "
+                      f"{len(archive)}/{limit}: se cierra la corrida", flush=True)
+                break
             new_valid = []
             for S in selected[:limit - len(archive)]:
                 J = evaluate_candidate(S, bag[S], predictions.get(S, (None,))[0])
@@ -676,7 +686,9 @@ def metricas(cfg=None):
     reference = max(float(r["mejor_J"]) for r in rows if r["mejor_J"])
     result, stability = [], []
     for method in METHODS:
-        for budget in cfg.presupuestos:
+        disponibles = sorted({int(r["presupuesto"]) for r in rows
+                              if r["metodo"] == method})
+        for budget in disponibles:
             selected = [r for r in rows if r["metodo"] == method
                         and int(r["presupuesto"]) == budget]
             if len(selected) != len(SEEDS):
