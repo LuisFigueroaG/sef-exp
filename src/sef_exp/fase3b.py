@@ -44,10 +44,21 @@ class Config:
     cargar: object = None
     mensaje_catalogo: str = ""
     granular_desde: int = 50
+    presupuestos: tuple = BUDGETS
+    epsilon: float = 0.001
+    etiqueta_y: str = "AUC medio de cinco folds"
+    titulo_j: str = "J mediana en CV"
+    evaluar_set: object = None
+    preparar_fn: object = None
+    bits_fn: object = None
+    archivo_evaluador: object = None
+    detalle_manifiesto: dict = field(default_factory=dict)
     espacio: Espacio = field(init=False)
 
     def __post_init__(self):
         self.espacio = Espacio(self.familias, self.k)
+        if self.archivo_evaluador is None:
+            self.archivo_evaluador = ROOT / "src/sef_exp/evaluador.py"
 
     def work(self, name):
         return ROOT / "work" / f"{self.nombre}_{name}"
@@ -170,13 +181,15 @@ def sha_archivos(paths):
 
 def firma_evaluador(cfg=None):
     cfg = cfg or CFG
-    return {
+    firma = {
         "datos_y_evaluador_sha256": sha_archivos((
-            *cfg.datos, ROOT / "src/sef_exp/evaluador.py",
+            *cfg.datos, cfg.archivo_evaluador,
         )),
         "fold_seed": SEED_FOLDS, "k": cfg.k, "iv_min": cfg.iv_min,
         "corr_max": cfg.corr_max, "vif_max": cfg.vif_max, "bin_cfg": BIN_CFG,
     }
+    firma.update(cfg.detalle_manifiesto)
+    return firma
 
 
 def manifiesto(cfg=None):
@@ -187,7 +200,7 @@ def manifiesto(cfg=None):
         "espacio_estructural": cfg.espacio.total,
         "metodos": METHODS,
         "semillas": SEEDS,
-        "presupuestos": BUDGETS,
+        "presupuestos": cfg.presupuestos,
         "codigo_sha256": sha_archivos(cfg.codigo),
         "versiones": {name: importlib.metadata.version(name) for name in (
             "numpy", "scipy", "scikit-learn", "optbinning", "polars", "plotly",
@@ -249,9 +262,9 @@ class Evaluaciones:
         if S in self.rows:
             self.hits += 1
             return self.rows[S], True
-        x, y, folds, pre, woe = context
         t = time.monotonic()
-        result = evaluar(S, x, y, folds, pre, woe, k=self.cfg.k)
+        evaluar_fn = self.cfg.evaluar_set or evaluar_por_defecto
+        result = evaluar_fn(S, context, self.cfg)
         row = {
             "S": "|".join(S), "estado": result["estado"], "causa": result["causa"],
             "J": "" if result["J"] is None else repr(result["J"]),
@@ -271,6 +284,15 @@ def bits(S, variables):
     return [int(v in selected) for v in variables]
 
 
+def evaluar_por_defecto(S, context, cfg):
+    x, y, folds, pre, woe = context
+    return evaluar(S, x, y, folds, pre, woe, k=cfg.k)
+
+
+def vector_por_defecto(S, cfg):
+    return bits(S, cfg.espacio.variables)
+
+
 def proponer(vecinos, vistos, rng, limit):
     candidates = list(dict.fromkeys(v for v in vecinos if v not in vistos))
     rng.shuffle(candidates)
@@ -279,7 +301,9 @@ def proponer(vecinos, vistos, rng, limit):
 
 def run_method(method, seed, limit, context, iv, cache, writer, global_best,
                cfg=None):
-    espacio = (cfg or CFG).espacio
+    cfg = cfg or CFG
+    espacio = cfg.espacio
+    vector = cfg.bits_fn or vector_por_defecto
     rng_init = random.Random(seed + 10_000)
     rng_guided = random.Random(seed + 15_000)
     rng_gen = random.Random(seed + 20_000)
@@ -313,7 +337,7 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best,
             "pared_sustituto_s": f"{surrogate_seconds:.6f}",
             "diversidad_variables": "" if not population else espacio.diversidad(population),
         }
-        if len(archive) in BUDGETS or len(archive) == limit:
+        if len(archive) in cfg.presupuestos or len(archive) == limit:
             summaries.append(row)
         eta = elapsed * (limit - len(archive)) / max(len(archive), 1)
         print(f"  {method} s={seed} {len(archive)}/{limit} ultimo={last} "
@@ -357,7 +381,7 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best,
             "pared_modelo_s": f"{model_seconds:.6f}",
         })
         progress_every = 50 if limit <= 100 else 250
-        if len(archive) in BUDGETS or len(archive) % progress_every == 0 or len(archive) == limit:
+        if len(archive) in cfg.presupuestos or len(archive) % progress_every == 0 or len(archive) == limit:
             snapshot(len(archive), last)
         return J
 
@@ -451,7 +475,7 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best,
                     random_state=seed * 100_000 + batch_index, n_jobs=1,
                 )
                 ordered = sorted(valid)
-                model.fit(np.asarray([bits(S, espacio.variables) for S in ordered], dtype=np.float32),
+                model.fit(np.asarray([vector(S, cfg) for S in ordered], dtype=np.float32),
                           np.asarray([valid[S] for S in ordered]))
                 surrogate_seconds += time.monotonic() - t
                 fits_surrogate += 1
@@ -502,7 +526,7 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best,
             predictions = {}
             if model is not None and bag:
                 ordered = list(bag)
-                X = np.asarray([bits(S, espacio.variables) for S in ordered], dtype=np.float32)
+                X = np.asarray([vector(S, cfg) for S in ordered], dtype=np.float32)
                 trees = np.asarray([tree.predict(X) for tree in model.estimators_])
                 means, stds = trees.mean(axis=0), trees.std(axis=0)
                 predictions = {S: (float(means[i]), float(stds[i]))
@@ -632,12 +656,12 @@ def _calcular_forward(cfg, espacio):
 def leer_referencia(cfg=None):
     cfg = cfg or CFG
     if not cfg.referencias_path.exists():
-        return None
+        return None, None
     with cfg.referencias_path.open(newline="") as f:
         for row in csv.DictReader(f):
-            if row["metodo"] == "forward" and row["J"]:
-                return float(row["J"])
-    return None
+            if row["J"]:
+                return row["metodo"], float(row["J"])
+    return None, None
 
 
 def metricas(cfg=None):
@@ -645,12 +669,12 @@ def metricas(cfg=None):
     espacio = cfg.espacio
     with cfg.summary_path.open(newline="") as f:
         rows = list(csv.DictReader(f))
-    if len(rows) != len(METHODS) * len(SEEDS) * len(BUDGETS):
-        raise RuntimeError("Faltan corridas o presupuestos de fase 3b")
+    if len(rows) != len(METHODS) * len(SEEDS) * len(cfg.presupuestos):
+        raise RuntimeError(f"Faltan corridas o presupuestos en {cfg.nombre}")
     reference = max(float(r["mejor_J"]) for r in rows if r["mejor_J"])
     result, stability = [], []
     for method in METHODS:
-        for budget in BUDGETS:
+        for budget in cfg.presupuestos:
             selected = [r for r in rows if r["metodo"] == method
                         and int(r["presupuesto"]) == budget]
             if len(selected) != len(SEEDS):
@@ -678,7 +702,7 @@ def metricas(cfg=None):
                 "J_mediana": "" if not js else repr(statistics.median(js)),
                 "brecha_al_mejor_observado_media": "" if not js else repr(
                     statistics.mean(reference - j for j in js)),
-                "dentro_001": sum(reference - j <= 0.001 + 1e-12 for j in js),
+                "dentro_001": sum(reference - j <= cfg.epsilon + 1e-12 for j in js),
                 "mejor_observado": repr(reference),
                 "jaccard_medio": "" if not overlaps else repr(statistics.mean(overlaps)),
                 "propuestas_media": repr(statistics.mean(int(r["propuestas"])
@@ -735,8 +759,9 @@ def graficar(rows, cfg=None):
         "ga_local": "#667c2b", "sef_completo": "#087f70",
     }
     mediana = curvas_granulares(cfg)
+    titulo_dentro = f"A {cfg.epsilon:g} del mejor observado"
     fig = make_subplots(rows=1, cols=2,
-                        subplot_titles=("J mediana en CV", "A 0,001 del mejor observado"))
+                        subplot_titles=(cfg.titulo_j, titulo_dentro))
     for method in METHODS:
         series = mediana.filter(pl.col("metodo") == method).sort("trial")
         trials = series["trial"].to_list()
@@ -755,18 +780,18 @@ def graficar(rows, cfg=None):
             line={"color": colors[method], "shape": "hv"},
             marker={"size": 7},
         ), row=1, col=2)
-    referencia = leer_referencia(cfg)
+    referencia_metodo, referencia = leer_referencia(cfg)
     if referencia is not None:
         fig.add_trace(go.Scatter(
-            x=[cfg.granular_desde, max(BUDGETS)], y=[referencia, referencia],
-            mode="lines", name="forward (referencia, sin presupuesto)",
+            x=[cfg.granular_desde, max(cfg.presupuestos)], y=[referencia, referencia],
+            mode="lines", name=f"{referencia_metodo} (referencia, sin presupuesto)",
             line={"color": "#888888", "dash": "dash", "width": 2},
         ), row=1, col=1)
     fig.update_xaxes(type="log", tickvals=[50, 100, 500, 1000, 2000],
                      ticktext=["50", "100", "500", "1000", "2000"],
                      title_text="Trials unicos (log)", row=1, col=1)
-    fig.update_xaxes(title_text="Trials unicos", tickvals=list(BUDGETS), row=1, col=2)
-    fig.update_yaxes(title_text="AUC medio de cinco folds", row=1, col=1)
+    fig.update_xaxes(title_text="Trials unicos", tickvals=list(cfg.presupuestos), row=1, col=2)
+    fig.update_yaxes(title_text=cfg.etiqueta_y, row=1, col=1)
     fig.update_yaxes(title_text="Fraccion de corridas", range=[0, 1.05], row=1, col=2)
     fig.update_layout(width=1400, height=570, template="plotly_white",
                       margin={"l": 75, "r": 35, "t": 70, "b": 90},
@@ -787,8 +812,8 @@ def ejecutar(pilot=False, pilot_trials=100, pilot_seeds=(0,), render=True,
 
 def _ejecutar(pilot, pilot_trials, pilot_seeds, render, cfg):
     if pilot:
-        if pilot_trials < 1 or pilot_trials > max(BUDGETS):
-            raise ValueError("El piloto necesita 1 a 2000 trials")
+        if pilot_trials < 1 or pilot_trials > max(cfg.presupuestos):
+            raise ValueError("El piloto supera el presupuesto maximo")
         methods, seeds, limit = METHODS, pilot_seeds, pilot_trials
         summary_path = cfg.pilot_path
         runs_dir = cfg.work("piloto_runs")
@@ -801,11 +826,12 @@ def _ejecutar(pilot, pilot_trials, pilot_seeds, render, cfg):
             raise RuntimeError("Resumen de fase 3b sin manifiesto")
         else:
             cfg.manifest_path.write_text(json.dumps(payload, indent=2) + "\n")
-        methods, seeds, limit = METHODS, SEEDS, max(BUDGETS)
+        methods, seeds, limit = METHODS, SEEDS, min(max(cfg.presupuestos),
+                                                    cfg.espacio.total)
         summary_path = cfg.summary_path
         runs_dir = cfg.runs_dir
 
-    context, iv, precompute_seconds = preparar(cfg)
+    context, iv, precompute_seconds = (cfg.preparar_fn or preparar)(cfg)
     cache = Evaluaciones(cfg=cfg)
     runs_dir.mkdir(parents=True, exist_ok=True)
     if summary_path.exists():

@@ -12,6 +12,7 @@ dependencies = [
   "numpy>=1.26",
   "optbinning>=1.0.0",
   "kaleido>=1.4,<2",
+  "statsmodels>=0.15.0",
 ]
 
 [tool.ruff]
