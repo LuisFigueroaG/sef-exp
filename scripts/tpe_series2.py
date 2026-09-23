@@ -125,11 +125,67 @@ def resumir(filas):
     return por_metodo
 
 
+def figura_tpe():
+    import plotly.graph_objects as go
+    import polars as pl
+
+    mediana = fase3b.curvas_granulares(CFG2)
+    tpe_frames = []
+    for path in sorted(RUNS_DIR.glob("*.csv")):
+        tpe_frames.append(pl.read_csv(
+            path, columns=["metodo", "semilla", "trial", "mejor_J"]
+        ).with_columns(pl.col("mejor_J").cast(pl.Float64, strict=False)))
+    tpe_runs = pl.concat(tpe_frames).sort("metodo", "semilla", "trial")
+    tpe_runs = tpe_runs.with_columns(
+        pl.col("mejor_J").forward_fill().over(["metodo", "semilla"])
+    ).filter(pl.col("trial") >= CFG2.granular_desde)
+    tpe_med = tpe_runs.group_by(["metodo", "trial"]).agg(
+        pl.col("mejor_J").median().alias("j_mediana")).sort("trial")
+    colors = {
+        "aleatorio": "#b65b38", "local": "#475c73",
+        "ga_local": "#667c2b", "sef_completo": "#087f70",
+        "tpe": "#7b2d8b",
+    }
+    fig = go.Figure()
+    for method in ("aleatorio", "local", "ga_local", "sef_completo"):
+        series = mediana.filter(pl.col("metodo") == method).sort("trial")
+        fig.add_trace(go.Scatter(
+            x=series["trial"].to_list(), y=series["j_mediana"].to_list(),
+            mode="lines", name=method,
+            line={"color": colors[method], "width": 2}))
+    fig.add_trace(go.Scatter(
+        x=tpe_med["trial"].to_list(), y=tpe_med["j_mediana"].to_list(),
+        mode="lines", name="tpe",
+        line={"color": colors["tpe"], "width": 2}))
+    with CFG2.referencias_path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            if row["J"]:
+                fig.add_hline(y=float(row["J"]), line_dash="dash",
+                              line_color="#888888",
+                              annotation_text=f"{row['metodo']} (referencia)")
+    fig.update_xaxes(type="log", tickvals=[25, 100, 500, 1000],
+                     ticktext=["25", "100", "500", "1000"],
+                     title_text="Trials unicos (log)")
+    fig.update_yaxes(title_text=CFG2.etiqueta_y)
+    fig.update_layout(width=1400, height=570, template="plotly_white",
+                      margin={"l": 75, "r": 35, "t": 40, "b": 90},
+                      legend={"orientation": "h", "y": -0.23, "x": 0.5,
+                              "xanchor": "center"})
+    destino = Path(str(CFG2.figure_path).replace("series2_curvas",
+                                                 "tpe_series2_curvas"))
+    fig.write_image(destino, scale=2)
+    print(f"figura: {destino}", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--semillas", default=",".join(map(str, range(20))))
     parser.add_argument("--trials", type=int, default=1000)
+    parser.add_argument("--solo-figura", action="store_true")
     args = parser.parse_args()
+    if args.solo_figura:
+        figura_tpe()
+        return
     previos = fase3b.aplicar_umbrales(CFG2)
     try:
         context, _, _ = (CFG2.preparar_fn or fase3b.preparar)(CFG2)
@@ -152,6 +208,7 @@ def main():
                 writer.writerow(r)
         print(f"TPE listo en {time.monotonic() - t0:.1f}s -> {SUMMARY_PATH}",
               flush=True)
+        figura_tpe()
         for metodo, m in resumir(filas).items():
             print(metodo, m, flush=True)
     finally:
