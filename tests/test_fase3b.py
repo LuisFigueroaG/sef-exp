@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
 
 from sef_exp.espacio import Espacio
 from sef_exp import fase3b
@@ -85,10 +85,10 @@ class SearchTests(unittest.TestCase):
                                 "propuestas": budget, "rechazados": 0,
                                 "pared_modelo_s": 1, "pared_algoritmo_s": 0.1,
                             })
-            with patch.object(fase3b, "SUMMARY_PATH", summary), patch.object(
-                fase3b, "METRICS_PATH", metrics
-            ), patch.object(fase3b, "STABILITY_PATH", stability):
-                result = fase3b.metricas()
+            stub = SimpleNamespace(
+                espacio=SPACE, summary_path=summary,
+                metrics_path=metrics, stability_path=stability)
+            result = fase3b.metricas(stub)
             self.assertEqual(len(result), len(fase3b.METHODS) * len(fase3b.BUDGETS))
             with stability.open() as f:
                 stability_rows = list(csv.DictReader(f))

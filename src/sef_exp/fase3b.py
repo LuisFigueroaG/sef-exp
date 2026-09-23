@@ -11,11 +11,13 @@ import statistics
 import sys
 import time
 from collections import Counter
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 from sklearn.ensemble import ExtraTreesRegressor
 
+from sef_exp import evaluador as evaluador_mod
 from sef_exp.espacio import Espacio
 from sef_exp.evaluador import (
     BIN_CFG, CORR_MAX, IV_MIN, K_VARS, SEED_FOLDS, VIF_MAX,
@@ -28,19 +30,98 @@ from sef_exp.fase3 import (
     POOL_RANDOM, POPULATION_SIZE, select_parent, survivor_population,
 )
 
-SPACE = Espacio(FAMILIAS_COMPLETAS, K_VARS)
+
+@dataclass
+class Config:
+    nombre: str
+    familias: tuple
+    k: int = K_VARS
+    iv_min: float = IV_MIN
+    corr_max: float = CORR_MAX
+    vif_max: float = VIF_MAX
+    datos: tuple = ()
+    codigo: tuple = ()
+    cargar: object = None
+    mensaje_catalogo: str = ""
+    granular_desde: int = 50
+    espacio: Espacio = field(init=False)
+
+    def __post_init__(self):
+        self.espacio = Espacio(self.familias, self.k)
+
+    def work(self, name):
+        return ROOT / "work" / f"{self.nombre}_{name}"
+
+    def output(self, name):
+        return ROOT / "outputs" / f"{self.nombre}_{name}"
+
+    @property
+    def cache_path(self):
+        return self.work("evaluaciones.csv")
+
+    @property
+    def cache_fingerprint(self):
+        return self.work("evaluaciones_firma.json")
+
+    @property
+    def runs_dir(self):
+        return self.work("runs")
+
+    @property
+    def summary_path(self):
+        return self.output("resumen.csv")
+
+    @property
+    def metrics_path(self):
+        return self.output("metricas.csv")
+
+    @property
+    def stability_path(self):
+        return self.output("estabilidad.csv")
+
+    @property
+    def figure_path(self):
+        return self.output("curvas.png")
+
+    @property
+    def manifest_path(self):
+        return self.output("manifest.json")
+
+    @property
+    def pilot_path(self):
+        return self.work("piloto_resumen.csv")
+
+    @property
+    def referencias_path(self):
+        return self.output("referencias.csv")
+
+
+CFG = Config(
+    nombre="fase3b",
+    familias=FAMILIAS_COMPLETAS,
+    datos=(ROOT / "data/X_train.csv", ROOT / "data/y_train.csv"),
+    codigo=(
+        ROOT / "src/sef_exp/espacio.py",
+        ROOT / "src/sef_exp/familias.py",
+        ROOT / "src/sef_exp/fase3.py",
+        ROOT / "src/sef_exp/fase3b.py",
+    ),
+    cargar=cargar_train,
+    mensaje_catalogo="Precompute train: 35 variables x 5 folds; test reservado sin abrir",
+)
+SPACE = CFG.espacio
 METHODS = ("aleatorio", "local", "ga_local", "sef_completo")
-CACHE_PATH = ROOT / "work/fase3b_evaluaciones.csv"
-CACHE_FINGERPRINT = ROOT / "work/fase3b_evaluaciones_firma.json"
-RUNS_DIR = ROOT / "work/fase3b_runs"
-SUMMARY_PATH = ROOT / "outputs/fase3b_resumen.csv"
-METRICS_PATH = ROOT / "outputs/fase3b_metricas.csv"
-STABILITY_PATH = ROOT / "outputs/fase3b_estabilidad.csv"
-FIGURE_PATH = ROOT / "outputs/fase3b_curvas.png"
-MANIFEST_PATH = ROOT / "outputs/fase3b_manifest.json"
-PILOT_PATH = ROOT / "work/fase3b_piloto_resumen.csv"
-REFERENCIAS_PATH = ROOT / "outputs/fase3b_referencias.csv"
-GRANULAR_DESDE = 50
+CACHE_PATH = CFG.cache_path
+CACHE_FINGERPRINT = CFG.cache_fingerprint
+RUNS_DIR = CFG.runs_dir
+SUMMARY_PATH = CFG.summary_path
+METRICS_PATH = CFG.metrics_path
+STABILITY_PATH = CFG.stability_path
+FIGURE_PATH = CFG.figure_path
+MANIFEST_PATH = CFG.manifest_path
+PILOT_PATH = CFG.pilot_path
+REFERENCIAS_PATH = CFG.referencias_path
+GRANULAR_DESDE = CFG.granular_desde
 
 CACHE_COLUMNS = ("S", "estado", "causa", "J", "aucs", "pared_s")
 TRIAL_COLUMNS = (
@@ -59,6 +140,25 @@ REFERENCIA_COLUMNS = (
 )
 
 
+def aplicar_umbrales(cfg):
+    """Fija los umbrales del evaluador segun cfg; devuelve los previos.
+
+    El evaluador lee estos umbrales como constantes de modulo y su
+    archivo no cambia entre fases, asi los fingerprints de fases
+    anteriores siguen validos. Los valores usados quedan registrados
+    en el manifiesto y la firma de cada fase.
+    """
+    previos = (evaluador_mod.IV_MIN, evaluador_mod.CORR_MAX, evaluador_mod.VIF_MAX)
+    evaluador_mod.IV_MIN = cfg.iv_min
+    evaluador_mod.CORR_MAX = cfg.corr_max
+    evaluador_mod.VIF_MAX = cfg.vif_max
+    return previos
+
+
+def restaurar_umbrales(previos):
+    evaluador_mod.IV_MIN, evaluador_mod.CORR_MAX, evaluador_mod.VIF_MAX = previos
+
+
 def sha_archivos(paths):
     h = hashlib.sha256()
     for path in paths:
@@ -68,42 +168,40 @@ def sha_archivos(paths):
     return h.hexdigest()
 
 
-def firma_evaluador():
+def firma_evaluador(cfg=None):
+    cfg = cfg or CFG
     return {
         "datos_y_evaluador_sha256": sha_archivos((
-            ROOT / "data/X_train.csv", ROOT / "data/y_train.csv",
-            ROOT / "src/sef_exp/evaluador.py",
+            *cfg.datos, ROOT / "src/sef_exp/evaluador.py",
         )),
-        "fold_seed": SEED_FOLDS, "k": K_VARS, "iv_min": IV_MIN,
-        "corr_max": CORR_MAX, "vif_max": VIF_MAX, "bin_cfg": BIN_CFG,
+        "fold_seed": SEED_FOLDS, "k": cfg.k, "iv_min": cfg.iv_min,
+        "corr_max": cfg.corr_max, "vif_max": cfg.vif_max, "bin_cfg": BIN_CFG,
     }
 
 
-def manifiesto():
+def manifiesto(cfg=None):
+    cfg = cfg or CFG
     return {
-        "evaluador": firma_evaluador(),
-        "familias": SPACE.familias,
-        "espacio_estructural": SPACE.total,
+        "evaluador": firma_evaluador(cfg),
+        "familias": cfg.espacio.familias,
+        "espacio_estructural": cfg.espacio.total,
         "metodos": METHODS,
         "semillas": SEEDS,
         "presupuestos": BUDGETS,
-        "codigo_sha256": sha_archivos((
-            ROOT / "src/sef_exp/espacio.py",
-            ROOT / "src/sef_exp/familias.py",
-            ROOT / "src/sef_exp/fase3.py",
-            ROOT / "src/sef_exp/fase3b.py",
-        )),
+        "codigo_sha256": sha_archivos(cfg.codigo),
         "versiones": {name: importlib.metadata.version(name) for name in (
             "numpy", "scipy", "scikit-learn", "optbinning", "polars", "plotly",
         )},
     }
 
 
-def preparar():
-    print("Precompute train: 35 variables x 5 folds; test reservado sin abrir", flush=True)
-    x, y = cargar_train()
-    if set(x.columns) != set(SPACE.variables):
-        raise RuntimeError("El catalogo de familias no coincide con las 35 columnas train")
+def preparar(cfg=None):
+    cfg = cfg or CFG
+    espacio = cfg.espacio
+    print(cfg.mensaje_catalogo, flush=True)
+    x, y = cfg.cargar()
+    if set(x.columns) != set(espacio.variables):
+        raise RuntimeError("El catalogo de familias no coincide con las columnas train")
     folds = hacer_folds(y)
     start = time.monotonic()
 
@@ -112,20 +210,22 @@ def preparar():
             print(f"  binning fold {r + 1}/5 variable {j + 1}/{n} {var} "
                   f"{time.monotonic() - start:.1f}s", flush=True)
 
-    pre = precomputar(x, y, folds, SPACE.variables, log=progreso)
-    woe = precomputar_woe(x, folds, pre, SPACE.variables)
+    pre = precomputar(x, y, folds, espacio.variables, log=progreso)
+    woe = precomputar_woe(x, folds, pre, espacio.variables)
     iv = {v: statistics.mean(pre[(r, v)]["iv"] for r in range(len(folds)))
-          for v in SPACE.variables}
+          for v in espacio.variables}
     elapsed = time.monotonic() - start
     print(f"Precompute completo en {elapsed:.1f}s", flush=True)
     return (x, y, folds, pre, woe), iv, elapsed
 
 
 class Evaluaciones:
-    def __init__(self, path=CACHE_PATH, fingerprint_path=CACHE_FINGERPRINT):
-        self.path = Path(path)
-        self.fingerprint_path = Path(fingerprint_path)
-        fingerprint = firma_evaluador()
+    def __init__(self, path=None, fingerprint_path=None, cfg=None):
+        cfg = cfg or CFG
+        self.cfg = cfg
+        self.path = Path(path or cfg.cache_path)
+        self.fingerprint_path = Path(fingerprint_path or cfg.cache_fingerprint)
+        fingerprint = firma_evaluador(cfg)
         if self.path.exists():
             if not self.fingerprint_path.exists() or json.loads(
                 self.fingerprint_path.read_text()
@@ -151,7 +251,7 @@ class Evaluaciones:
             return self.rows[S], True
         x, y, folds, pre, woe = context
         t = time.monotonic()
-        result = evaluar(S, x, y, folds, pre, woe)
+        result = evaluar(S, x, y, folds, pre, woe, k=self.cfg.k)
         row = {
             "S": "|".join(S), "estado": result["estado"], "causa": result["causa"],
             "J": "" if result["J"] is None else repr(result["J"]),
@@ -166,9 +266,9 @@ class Evaluaciones:
         return row, False
 
 
-def bits(S):
+def bits(S, variables):
     selected = set(S)
-    return [int(v in selected) for v in SPACE.variables]
+    return [int(v in selected) for v in variables]
 
 
 def proponer(vecinos, vistos, rng, limit):
@@ -177,7 +277,9 @@ def proponer(vecinos, vistos, rng, limit):
     return candidates[:limit]
 
 
-def run_method(method, seed, limit, context, iv, cache, writer, global_best):
+def run_method(method, seed, limit, context, iv, cache, writer, global_best,
+               cfg=None):
+    espacio = (cfg or CFG).espacio
     rng_init = random.Random(seed + 10_000)
     rng_guided = random.Random(seed + 15_000)
     rng_gen = random.Random(seed + 20_000)
@@ -209,7 +311,7 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best):
             "cpu_algoritmo_s": f"{time.process_time() - start_cpu:.6f}",
             "cache_hits": cache_hits, "ajustes_sustituto": fits_surrogate,
             "pared_sustituto_s": f"{surrogate_seconds:.6f}",
-            "diversidad_variables": "" if not population else SPACE.diversidad(population),
+            "diversidad_variables": "" if not population else espacio.diversidad(population),
         }
         if len(archive) in BUDGETS or len(archive) == limit:
             summaries.append(row)
@@ -262,7 +364,7 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best):
     def offer(S, source, bag):
         nonlocal attempts, duplicates
         attempts += 1
-        if not SPACE.valido(S):
+        if not espacio.valido(S):
             raise AssertionError(f"Propuesta estructural invalida: {S}")
         if S in archive or S in bag:
             duplicates += 1
@@ -274,7 +376,7 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best):
         while len(archive) < limit:
             bag = {}
             while not bag:
-                offer(SPACE.muestra(rng_random), "aleatorio", bag)
+                offer(espacio.muestra(rng_random), "aleatorio", bag)
             S = next(iter(bag))
             evaluate_candidate(S, bag[S])
 
@@ -284,14 +386,14 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best):
             if incumbent is None:
                 bag = {}
                 while not bag:
-                    offer(SPACE.muestra(rng_random), "reinicio", bag)
+                    offer(espacio.muestra(rng_random), "reinicio", bag)
                 incumbent = next(iter(bag))
                 evaluate_candidate(incumbent, bag[incumbent])
                 if incumbent not in valid:
                     incumbent = None
                 continue
             base = valid[incumbent]
-            neighbors = proponer(SPACE.vecinos_simples(incumbent), archive, rng_local, 256)
+            neighbors = proponer(espacio.vecinos_simples(incumbent), archive, rng_local, 256)
             candidates = []
             for S in neighbors:
                 if len(archive) >= limit:
@@ -305,7 +407,7 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best):
             if not improving and len(archive) < limit:
                 doubles = []
                 for _ in range(512):
-                    S = SPACE.muta(incumbent, rng_local, dobles=True)
+                    S = espacio.muta(incumbent, rng_local, dobles=True)
                     if len(set(incumbent) - set(S)) == 2:
                         doubles.append(S)
                 for S in proponer(doubles, archive, rng_local, 64):
@@ -322,13 +424,13 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best):
     elif method in ("ga_local", "sef_completo"):
         initial = {}
         while len(initial) < 48:
-            offer(SPACE.muestra(rng_init), "init_random", initial)
+            offer(espacio.muestra(rng_init), "init_random", initial)
         for _ in range(2048):
             if len(initial) >= POPULATION_SIZE:
                 break
-            offer(SPACE.guiada(iv, rng_guided), "init_iv", initial)
+            offer(espacio.guiada(iv, rng_guided), "init_iv", initial)
         while len(initial) < POPULATION_SIZE:
-            offer(SPACE.muestra(rng_init), "init_random", initial)
+            offer(espacio.muestra(rng_init), "init_random", initial)
         for S, source in initial.items():
             if len(archive) >= limit:
                 break
@@ -349,7 +451,7 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best):
                     random_state=seed * 100_000 + batch_index, n_jobs=1,
                 )
                 ordered = sorted(valid)
-                model.fit(np.asarray([bits(S) for S in ordered], dtype=np.float32),
+                model.fit(np.asarray([bits(S, espacio.variables) for S in ordered], dtype=np.float32),
                           np.asarray([valid[S] for S in ordered]))
                 surrogate_seconds += time.monotonic() - t
                 fits_surrogate += 1
@@ -363,25 +465,25 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best):
                 a = select_parent(population, valid, rng_gen)
                 if len(population) > 1 and rng_gen.random() < 0.6:
                     b = select_parent(population, valid, rng_gen, a)
-                    child, _ = SPACE.cruza(a, b, rng_gen)
+                    child, _ = espacio.cruza(a, b, rng_gen)
                     if rng_gen.random() < 0.8:
-                        child = SPACE.muta(child, rng_gen)
+                        child = espacio.muta(child, rng_gen)
                     source = "cruce"
                 else:
-                    child = SPACE.muta(a, rng_gen)
+                    child = espacio.muta(a, rng_gen)
                     source = "mutacion"
                 if offer(child, source, bag):
                     genetic.append(child)
             for _ in range(POOL_RANDOM):
                 for _ in range(100):
-                    S = SPACE.muestra(rng_random)
+                    S = espacio.muestra(rng_random)
                     if offer(S, "inmigrante", bag):
                         immigrants.append(S)
                         break
             if population:
                 for parent in sorted(population, key=lambda S: (valid[S], S),
                                      reverse=True)[:ELITES]:
-                    for S in proponer(SPACE.vecinos_simples(parent),
+                    for S in proponer(espacio.vecinos_simples(parent),
                                       set(archive) | set(bag), rng_local, 4):
                         if len(local) >= POOL_LOCAL:
                             break
@@ -393,14 +495,14 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best):
                 while len(local) < POOL_LOCAL and tries < 128:
                     tries += 1
                     parent = rng_local.choice(population)
-                    S = SPACE.muta(parent, rng_local)
+                    S = espacio.muta(parent, rng_local)
                     if offer(S, "local_2", bag):
                         local.append(S)
 
             predictions = {}
             if model is not None and bag:
                 ordered = list(bag)
-                X = np.asarray([bits(S) for S in ordered], dtype=np.float32)
+                X = np.asarray([bits(S, espacio.variables) for S in ordered], dtype=np.float32)
                 trees = np.asarray([tree.predict(X) for tree in model.estimators_])
                 means, stds = trees.mean(axis=0), trees.std(axis=0)
                 predictions = {S: (float(means[i]), float(stds[i]))
@@ -428,7 +530,7 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best):
             rng_gen.shuffle(leftovers)
             take(leftovers, BATCH_SIZE - len(selected))
             while len(selected) < min(BATCH_SIZE, limit - len(archive)):
-                S = SPACE.muestra(rng_random)
+                S = espacio.muestra(rng_random)
                 if offer(S, "respaldo", bag):
                     selected.append(S)
             new_valid = []
@@ -457,16 +559,17 @@ def run_method(method, seed, limit, context, iv, cache, writer, global_best):
     return summaries
 
 
-def forward_greedy(evaluar_tamano):
-    """Forward greedy determinista sobre SPACE.
+def forward_greedy(evaluar_tamano, cfg=None):
+    """Forward greedy determinista sobre el espacio de cfg.
 
     evaluar_tamano(S, k) devuelve J o None. No usa presupuesto por
     trials: es una referencia descriptiva fuera de la comparacion.
     """
+    espacio = (cfg or CFG).espacio
     chosen, usadas, ensayos = (), set(), 0
-    for size in range(1, SPACE.k + 1):
+    for size in range(1, espacio.k + 1):
         opciones = []
-        for name, choices in SPACE.familias:
+        for name, choices in espacio.familias:
             if name in usadas:
                 continue
             for v in choices:
@@ -483,15 +586,25 @@ def forward_greedy(evaluar_tamano):
     return J, chosen, ensayos
 
 
-def calcular_forward():
-    context, _, _ = preparar()
-    cache = Evaluaciones()
+def calcular_forward(cfg=None):
+    cfg = cfg or CFG
+    espacio = cfg.espacio
+    previos = aplicar_umbrales(cfg)
+    try:
+        return _calcular_forward(cfg, espacio)
+    finally:
+        restaurar_umbrales(previos)
+
+
+def _calcular_forward(cfg, espacio):
+    context, _, _ = preparar(cfg)
+    cache = Evaluaciones(cfg=cfg)
     x, y, folds, pre, woe = context
     model_seconds = 0.0
 
     def evaluar_tamano(S, k):
         nonlocal model_seconds
-        if k == SPACE.k:
+        if k == espacio.k:
             row, _ = cache.consulta(S, context)
             J = float(row["J"]) if row["J"] else None
             model_seconds += float(row["pared_s"])
@@ -501,8 +614,8 @@ def calcular_forward():
         model_seconds += time.monotonic() - t
         return result["J"]
 
-    J, S, ensayos = forward_greedy(evaluar_tamano)
-    with REFERENCIAS_PATH.open("w", newline="") as f:
+    J, S, ensayos = forward_greedy(evaluar_tamano, cfg)
+    with cfg.referencias_path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=REFERENCIA_COLUMNS, lineterminator="\n")
         writer.writeheader()
         writer.writerow({
@@ -511,23 +624,26 @@ def calcular_forward():
             "ensayos": ensayos, "pared_modelo_s": f"{model_seconds:.6f}",
         })
     print(f"Forward referencia: J={J} S={'|'.join(S) if S else '-'} "
-          f"ensayos={ensayos} modelo={model_seconds:.1f}s -> {REFERENCIAS_PATH}",
+          f"ensayos={ensayos} modelo={model_seconds:.1f}s -> {cfg.referencias_path}",
           flush=True)
     return J
 
 
-def leer_referencia():
-    if not REFERENCIAS_PATH.exists():
+def leer_referencia(cfg=None):
+    cfg = cfg or CFG
+    if not cfg.referencias_path.exists():
         return None
-    with REFERENCIAS_PATH.open(newline="") as f:
+    with cfg.referencias_path.open(newline="") as f:
         for row in csv.DictReader(f):
             if row["metodo"] == "forward" and row["J"]:
                 return float(row["J"])
     return None
 
 
-def metricas():
-    with SUMMARY_PATH.open(newline="") as f:
+def metricas(cfg=None):
+    cfg = cfg or CFG
+    espacio = cfg.espacio
+    with cfg.summary_path.open(newline="") as f:
         rows = list(csv.DictReader(f))
     if len(rows) != len(METHODS) * len(SEEDS) * len(BUDGETS):
         raise RuntimeError("Faltan corridas o presupuestos de fase 3b")
@@ -544,10 +660,10 @@ def metricas():
             overlaps = [len(a & b) / len(a | b) for i, a in enumerate(sets)
                         for b in sets[i + 1:]]
             variable_counts = Counter(v for S in sets for v in S)
-            family_counts = Counter(SPACE.familia_de[v] for S in sets for v in S)
+            family_counts = Counter(espacio.familia_de[v] for S in sets for v in S)
             for kind, names, counts in (
-                ("variable", SPACE.variables, variable_counts),
-                ("familia", (name for name, _ in SPACE.familias), family_counts),
+                ("variable", espacio.variables, variable_counts),
+                ("familia", (name for name, _ in espacio.familias), family_counts),
             ):
                 for name in names:
                     stability.append({
@@ -574,40 +690,42 @@ def metricas():
                 "pared_algoritmo_media_s": repr(statistics.mean(float(r["pared_algoritmo_s"])
                                                               for r in selected)),
             })
-    with METRICS_PATH.open("w", newline="") as f:
+    with cfg.metrics_path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=tuple(result[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(result)
-    with STABILITY_PATH.open("w", newline="") as f:
+    with cfg.stability_path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=tuple(stability[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(stability)
     return result
 
 
-def curvas_granulares():
+def curvas_granulares(cfg=None):
     """Mediana del mejor J por trial sobre las trazas de work/.
 
-    Empieza en GRANULAR_DESDE porque antes ninguna semilla tiene
+    Empieza en cfg.granular_desde porque antes ninguna semilla tiene
     cobertura completa de factibles y la mediana es ruido.
     """
+    cfg = cfg or CFG
     import polars as pl
 
     frames = []
-    for path in sorted(RUNS_DIR.glob("*.csv")):
+    for path in sorted(cfg.runs_dir.glob("*.csv")):
         frames.append(pl.read_csv(
             path, columns=["metodo", "semilla", "trial", "mejor_J"]))
     runs = pl.concat(frames).with_columns(
         pl.col("mejor_J").cast(pl.Float64)).sort("metodo", "semilla", "trial")
     runs = runs.with_columns(
         pl.col("mejor_J").forward_fill().over(["metodo", "semilla"])
-    ).filter(pl.col("trial") >= GRANULAR_DESDE)
+    ).filter(pl.col("trial") >= cfg.granular_desde)
     mediana = runs.group_by(["metodo", "trial"]).agg(
         pl.col("mejor_J").median().alias("j_mediana"))
     return mediana.sort("metodo", "trial")
 
 
-def graficar(rows):
+def graficar(rows, cfg=None):
+    cfg = cfg or CFG
     import plotly.graph_objects as go
     import polars as pl
     from plotly.subplots import make_subplots
@@ -616,7 +734,7 @@ def graficar(rows):
         "aleatorio": "#b65b38", "local": "#475c73",
         "ga_local": "#667c2b", "sef_completo": "#087f70",
     }
-    mediana = curvas_granulares()
+    mediana = curvas_granulares(cfg)
     fig = make_subplots(rows=1, cols=2,
                         subplot_titles=("J mediana en CV", "A 0,001 del mejor observado"))
     for method in METHODS:
@@ -637,10 +755,10 @@ def graficar(rows):
             line={"color": colors[method], "shape": "hv"},
             marker={"size": 7},
         ), row=1, col=2)
-    referencia = leer_referencia()
+    referencia = leer_referencia(cfg)
     if referencia is not None:
         fig.add_trace(go.Scatter(
-            x=[GRANULAR_DESDE, max(BUDGETS)], y=[referencia, referencia],
+            x=[cfg.granular_desde, max(BUDGETS)], y=[referencia, referencia],
             mode="lines", name="forward (referencia, sin presupuesto)",
             line={"color": "#888888", "dash": "dash", "width": 2},
         ), row=1, col=1)
@@ -653,32 +771,42 @@ def graficar(rows):
     fig.update_layout(width=1400, height=570, template="plotly_white",
                       margin={"l": 75, "r": 35, "t": 70, "b": 90},
                       legend={"orientation": "h", "y": -0.23, "x": 0.5, "xanchor": "center"})
-    fig.write_image(FIGURE_PATH, scale=2)
-    print(f"Metricas: {METRICS_PATH}; figura: {FIGURE_PATH}", flush=True)
+    fig.write_image(cfg.figure_path, scale=2)
+    print(f"Metricas: {cfg.metrics_path}; figura: {cfg.figure_path}", flush=True)
 
 
-def ejecutar(pilot=False, pilot_trials=100, pilot_seeds=(0,), render=True):
+def ejecutar(pilot=False, pilot_trials=100, pilot_seeds=(0,), render=True,
+             cfg=None):
+    cfg = cfg or CFG
+    previos = aplicar_umbrales(cfg)
+    try:
+        return _ejecutar(pilot, pilot_trials, pilot_seeds, render, cfg)
+    finally:
+        restaurar_umbrales(previos)
+
+
+def _ejecutar(pilot, pilot_trials, pilot_seeds, render, cfg):
     if pilot:
         if pilot_trials < 1 or pilot_trials > max(BUDGETS):
             raise ValueError("El piloto necesita 1 a 2000 trials")
         methods, seeds, limit = METHODS, pilot_seeds, pilot_trials
-        summary_path = PILOT_PATH
-        runs_dir = ROOT / "work/fase3b_piloto_runs"
+        summary_path = cfg.pilot_path
+        runs_dir = cfg.work("piloto_runs")
     else:
-        payload = manifiesto()
-        if MANIFEST_PATH.exists():
-            if json.loads(MANIFEST_PATH.read_text()) != json.loads(json.dumps(payload)):
+        payload = manifiesto(cfg)
+        if cfg.manifest_path.exists():
+            if json.loads(cfg.manifest_path.read_text()) != json.loads(json.dumps(payload)):
                 raise RuntimeError("Fase 3b existente usa otro codigo o familias; resguardar antes")
-        elif SUMMARY_PATH.exists():
+        elif cfg.summary_path.exists():
             raise RuntimeError("Resumen de fase 3b sin manifiesto")
         else:
-            MANIFEST_PATH.write_text(json.dumps(payload, indent=2) + "\n")
+            cfg.manifest_path.write_text(json.dumps(payload, indent=2) + "\n")
         methods, seeds, limit = METHODS, SEEDS, max(BUDGETS)
-        summary_path = SUMMARY_PATH
-        runs_dir = RUNS_DIR
+        summary_path = cfg.summary_path
+        runs_dir = cfg.runs_dir
 
-    context, iv, precompute_seconds = preparar()
-    cache = Evaluaciones()
+    context, iv, precompute_seconds = preparar(cfg)
+    cache = Evaluaciones(cfg=cfg)
     runs_dir.mkdir(parents=True, exist_ok=True)
     if summary_path.exists():
         with summary_path.open(newline="") as f:
@@ -709,14 +837,14 @@ def ejecutar(pilot=False, pilot_trials=100, pilot_seeds=(0,), render=True):
                 if (method, seed) in completed:
                     continue
                 print(f"[{finished + 1}/{total}] {method} semilla={seed} "
-                      f"presupuesto={limit} espacio={SPACE.total}", flush=True)
+                      f"presupuesto={limit} espacio={cfg.espacio.total}", flush=True)
                 path = runs_dir / f"{method}_{seed:02d}.csv"
                 with path.open("w", newline="") as trial_file:
                     writer = csv.DictWriter(trial_file, fieldnames=TRIAL_COLUMNS,
                                             lineterminator="\n")
                     writer.writeheader()
                     summaries = run_method(method, seed, limit, context, iv, cache,
-                                           writer, global_best)
+                                           writer, global_best, cfg)
                 summary_writer.writerows(summaries)
                 summary_file.flush()
                 finished += 1
@@ -734,12 +862,13 @@ def ejecutar(pilot=False, pilot_trials=100, pilot_seeds=(0,), render=True):
           f"RSS_pico_MiB={resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024 ** 2 if sys.platform == 'darwin' else 1024):.1f}",
           flush=True)
     if not pilot:
-        rows = metricas()
+        rows = metricas(cfg)
         if render:
-            graficar(rows)
+            graficar(rows, cfg)
 
 
-def main():
+def main(cfg=None):
+    cfg = cfg or CFG
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--piloto", action="store_true")
     parser.add_argument("--trials", type=int, default=100,
@@ -752,12 +881,13 @@ def main():
                              "referencia descriptiva (fuera de la comparacion)")
     args = parser.parse_args()
     if args.forward_ref:
-        calcular_forward()
+        calcular_forward(cfg)
     elif args.solo_graficos:
-        graficar(metricas())
+        graficar(metricas(cfg), cfg)
     else:
         seeds = tuple(int(x) for x in args.semillas.split(","))
-        ejecutar(args.piloto, args.trials, seeds, render=not args.sin_graficos)
+        ejecutar(args.piloto, args.trials, seeds, render=not args.sin_graficos,
+                 cfg=cfg)
 
 
 if __name__ == "__main__":

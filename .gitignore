@@ -7,3 +7,7 @@ __pycache__/
 work/
 tmp/
 *.parquet
+
+# Descarga cruda UCI (reproducible con el script); solo se versiona la particion.
+data/taiwan/taiwan.xls
+data/taiwan/taiwan.csv
