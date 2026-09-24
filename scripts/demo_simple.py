@@ -1,4 +1,4 @@
-"""Demo personal: aleatorio, stepwise x3 y SEF sin cache, tiempo real.
+"""Demo personal: aleatorio, stepwise x2 y SEF sin cache, tiempo real.
 
 Diferencias con los tracks del repo: sin cache de evaluaciones
 (cada propuesta se ajusta de verdad y se mide pared real),
@@ -50,7 +50,7 @@ from sef_exp.fase2 import ROOT
 
 K = 6
 METODOS_MOTOR = ("aleatorio", "local", "ga_local", "sef")
-METODOS_STEP = ("forward", "backward", "hibrido")
+METODOS_STEP = ("forward", "hibrido")
 WORK = ROOT / "work/demo_runs"
 
 log = logging.getLogger("demo")
@@ -176,6 +176,32 @@ def ranking_univariado(datos, folds):
     return rank
 
 
+class ProgressWriter:
+    """Envuelve el writer y loguea el avance por cuartos, estilo optuna."""
+
+    def __init__(self, writer, metodo, seed, trials):
+        self.writer = writer
+        self.metodo = metodo
+        self.seed = seed
+        self.trials = trials
+        self.n = 0
+        self.marcas = {trials // 4, trials // 2, 3 * trials // 4} - {0}
+
+    def __getattr__(self, name):
+        return getattr(self.writer, name)
+
+    def writerow(self, row):
+        self.n += 1
+        self.writer.writerow(row)
+        if self.n in self.marcas:
+            try:
+                mejor = f"{float(row.get('mejor_J') or ''):.4f}"
+            except (TypeError, ValueError):
+                mejor = "-"
+            log.info("%s semilla=%s [%d/%d] mejor=%s", self.metodo,
+                     self.seed, self.n, self.trials, mejor)
+
+
 def correr_motor(metodo, seed, trials, cfg, evaluar_set, iv):
     metodo = "sef_completo" if metodo == "sef" else metodo
     cache = SinCache(lambda S: evaluar_set(S, None, None))
@@ -185,7 +211,8 @@ def correr_motor(metodo, seed, trials, cfg, evaluar_set, iv):
         writer = csv.DictWriter(f, fieldnames=fase3b.TRIAL_COLUMNS,
                                 lineterminator="\n")
         writer.writeheader()
-        fase3b.run_method(metodo, seed, trials, None, iv, cache, writer,
+        fase3b.run_method(metodo, seed, trials, None, iv, cache,
+                          ProgressWriter(writer, metodo, seed, trials),
                           global_best, cfg)
     return cache.fits
 
@@ -216,10 +243,17 @@ def traza_step(metodo, puntos):
 
 def correr_forward(cfg, evaluar):
     ensayos = []
+    mejor = {"J": None}
+
     def evaluar_tamano(S, k):
         t = time.perf_counter()
         J = evaluar(S)
         ensayos.append((time.perf_counter() - t, J, S))
+        if J is not None and (mejor["J"] is None or J > mejor["J"]):
+            mejor["J"] = J
+        if len(ensayos) % 50 == 0:
+            log.info("forward [%d ajustes] mejor=%s", len(ensayos),
+                     f"{mejor['J']:.4f}" if mejor["J"] is not None else "-")
         return J
     J, S, _ = fase3b.forward_greedy(evaluar_tamano, cfg)
     return traza_step("forward", puntos_reales(ensayos)), S
@@ -231,30 +265,6 @@ def puntos_reales(ensayos):
         acum += dt
         puntos.append((acum, J, S))
     return puntos
-
-
-def correr_backward(cfg, evaluar, familias):
-    espacio = cfg.espacio
-    elegidas = tuple(sorted(espacio.variables))
-    ensayos, vistos = [], set()
-
-    def probar(S):
-        t = time.perf_counter()
-        J = evaluar(S)
-        ensayos.append((time.perf_counter() - t, J, S))
-        return J
-
-    while len(elegidas) > K:
-        opciones = []
-        for v in elegidas:
-            S = tuple(x for x in elegidas if x != v)
-            opciones.append((probar(S), S))
-        validas = [o for o in opciones if o[0] is not None]
-        if not validas:
-            break
-        _, elegidas = max(validas, key=lambda o: (o[0], o[1]))
-    elegidas = reparar_familias(elegidas, probar, espacio)
-    return traza_step("backward", puntos_reales(ensayos)), elegidas
 
 
 def reparar_familias(elegidas, evaluar, espacio):
@@ -293,11 +303,17 @@ def reparar_familias(elegidas, evaluar, espacio):
 def correr_hibrido(cfg, evaluar):
     espacio = cfg.espacio
     ensayos = []
+    mejor = {"J": None}
 
     def probar(S):
         t = time.perf_counter()
         J = evaluar(S)
         ensayos.append((time.perf_counter() - t, J, S))
+        if J is not None and (mejor["J"] is None or J > mejor["J"]):
+            mejor["J"] = J
+        if len(ensayos) % 50 == 0:
+            log.info("hibrido [%d ajustes] mejor=%s", len(ensayos),
+                     f"{mejor['J']:.4f}" if mejor["J"] is not None else "-")
         return J
 
     elegidas, usadas = (), set()
@@ -391,17 +407,18 @@ def leer_trazas():
     return series
 
 
-def figura_html(series, test_rows, subtitulo):
+def figura_html(series, test_rows, subtitulo,
+                titulo="Demo simple · MRAP sin cache, tiempo real"):
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
 
     colores = {"aleatorio": "#b65b38", "local": "#475c73",
                "ga_local": "#667c2b", "sef_completo": "#087f70",
-               "forward": "#a1a1aa", "backward": "#71717a",
+               "forward": "#a1a1aa",
                "hibrido": "#3f3f46"}
     nombres = {"aleatorio": "Aleatorio", "local": "Local",
                "ga_local": "GA + local", "sef_completo": "SEF",
-               "forward": "Forward", "backward": "Backward",
+               "forward": "Forward",
                "hibrido": "Hibrido"}
     fig = make_subplots(rows=1, cols=2,
                         subplot_titles=("Por trials (ensayos)",
@@ -462,7 +479,7 @@ def figura_html(series, test_rows, subtitulo):
       th {{ color: var(--mut); }} .num {{ text-align: right;
         font-variant-numeric: tabular-nums; }} .vars {{ font-size: 11px; }}
     </style></head><body><main>
-    <h1>Demo simple · MRAP sin cache, tiempo real</h1>
+    <h1>{titulo}</h1>
     <p class="lede">Cada propuesta se ajusta de verdad, sin cache.
     Test abierto una sola vez.<br>
     {subtitulo}</p>
@@ -553,8 +570,6 @@ def main():
 
         finales = {}
         for nombre, fn in (("forward", lambda: correr_forward(cfg, evaluar)),
-                           ("backward", lambda: correr_backward(
-                               cfg, evaluar, FAMILIAS_COMPLETAS)),
                            ("hibrido", lambda: correr_hibrido(cfg, evaluar))):
             t = time.perf_counter()
             _, S = fn()
