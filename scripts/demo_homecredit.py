@@ -46,19 +46,31 @@ def main():
     parser.add_argument("--semillas", default="0,1,2")
     parser.add_argument("--c", type=float, default=1.0)
     parser.add_argument("--muestra", type=int, default=None)
-    parser.add_argument("--hostil", action="store_true")
+    parser.add_argument("--hostil", action="store_true",
+                        help="atajo de --modelo mlp")
+    parser.add_argument("--modelo", default="logit",
+                        choices=("logit", "mlp", "lgb"),
+                        help="evaluador: logistica+WOE (docil), MLP "
+                             "congelado o LightGBM sobre crudas")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
     D.configurar_log(logging.DEBUG if args.verbose else logging.INFO)
     log = D.log
 
-    D.WORK = ROOT / ("work/demo_hc_hostil_runs" if args.hostil
+    if args.hostil:
+        args.modelo = "mlp"
+    es_lgb = args.modelo == "lgb"
+    es_mlp = args.modelo == "mlp"
+    comp = {"logit": "", "mlp": "hostil", "lgb": "lgb"}[args.modelo]
+
+    D.WORK = ROOT / (f"work/demo_hc_{comp}_runs" if comp
                      else "work/demo_hc_runs")
-    destino = ROOT / ("outputs/demo_homecredit_hostil.html" if args.hostil
+    destino = ROOT / (f"outputs/demo_homecredit_{comp}.html" if comp
                       else "outputs/demo_homecredit.html")
     if args.muestra is None:
-        args.muestra = 8000 if args.hostil else 20000
-    modo = "MLP(32)x58" if args.hostil else f"logit(C={args.c})"
+        args.muestra = 20000 if args.modelo == "logit" else 8000
+    modo = {"logit": f"logit(C={args.c})", "mlp": "MLP(32)x58",
+            "lgb": "LGBM(200x31)"}[args.modelo]
     log.info("demo_homecredit modo=%s trials=%s semillas=%s muestra=%s",
              modo, args.trials, args.semillas, args.muestra)
 
@@ -70,9 +82,13 @@ def main():
              len(datos["ytr"]), len(datos["vars"]))
     folds = hacer_folds(datos["ytr"])
     familias = [(v, (v,)) for v in datos["vars"]]
-    if args.hostil:
+    if es_mlp:
         evaluar = lambda S: D.ajuste_mlp_cv(S, datos, folds)  # noqa
         puntuar = lambda S: D.test_score_mlp(S, datos)  # noqa
+        iv = D.ranking_univariado(datos, folds)
+    elif es_lgb:
+        evaluar = lambda S: D.ajuste_lgb_cv(S, datos, folds)  # noqa
+        puntuar = lambda S: D.test_score_lgb(S, datos)  # noqa
         iv = D.ranking_univariado(datos, folds)
     else:
         pre = precomputar(datos["xtr"], datos["ytr"], folds, datos["vars"])

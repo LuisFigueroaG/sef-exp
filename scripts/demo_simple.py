@@ -32,6 +32,7 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
+from lightgbm import LGBMClassifier
 from optbinning import OptimalBinning
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.impute import SimpleImputer
@@ -61,6 +62,13 @@ MLP_CFG = {"hidden_layer_sizes": (32,), "activation": "relu",
            "learning_rate_init": 0.0005633564508332506,
            "batch_size": 1024, "max_iter": 1, "random_state": 42}
 MLP_EPOCAS = 58
+
+# LightGBM fijo para el modo arboles: maneja nulos nativo, sin WOE.
+LGBM_CFG = {"objective": "binary", "n_estimators": 200,
+            "num_leaves": 31, "learning_rate": 0.05,
+            "min_child_samples": 100, "subsample": 0.8,
+            "reg_lambda": 1.0, "random_state": 42, "num_threads": 1,
+            "verbosity": -1}
 
 
 def configurar_log(nivel=logging.INFO):
@@ -149,6 +157,22 @@ def ajuste_mlp_cv(S, datos, folds):
             if not (np.all(np.isfinite(Atr)) and np.all(np.isfinite(Ava))):
                 return None
             clf = ajustar_mlp(Atr, datos["ytr"][tr])
+            aucs.append(float(roc_auc_score(
+                datos["ytr"][va], clf.predict_proba(Ava)[:, 1])))
+        return float(np.mean(aucs))
+    except Exception:
+        return None
+
+
+def ajuste_lgb_cv(S, datos, folds):
+    """AUC medio de 5 folds con LightGBM fijo; None si algo falla."""
+    try:
+        aucs = []
+        for tr, va in folds:
+            Atr = np.column_stack([crudo(datos, v)[tr] for v in S])
+            Ava = np.column_stack([crudo(datos, v)[va] for v in S])
+            clf = LGBMClassifier(**LGBM_CFG)
+            clf.fit(Atr, datos["ytr"][tr])
             aucs.append(float(roc_auc_score(
                 datos["ytr"][va], clf.predict_proba(Ava)[:, 1])))
         return float(np.mean(aucs))
@@ -394,6 +418,16 @@ def test_score_mlp(S, datos):
                                clf.predict_proba(Ate)[:, 1]))
 
 
+def test_score_lgb(S, datos):
+    Atr = np.column_stack([crudo(datos, v) for v in S])
+    Ate = np.column_stack(
+        [datos["xte"][v].to_numpy().astype(np.float64) for v in S])
+    clf = LGBMClassifier(**LGBM_CFG)
+    clf.fit(Atr, datos["ytr"])
+    return float(roc_auc_score(datos["yte"],
+                               clf.predict_proba(Ate)[:, 1]))
+
+
 def leer_trazas():
     series = {}
     for path in sorted(WORK.glob("*.csv")):
@@ -501,21 +535,29 @@ def main():
                              "completo); mismo recorte para todos "
                              "(default: 20000, 8000 en hostil)")
     parser.add_argument("--hostil", action="store_true",
-                        help="MLP congelado sobre crudas en vez de "
-                             "logistica+WOE")
+                        help="atajo de --modelo mlp")
+    parser.add_argument("--modelo", default="logit",
+                        choices=("logit", "mlp", "lgb"),
+                        help="evaluador: logistica+WOE (docil), MLP "
+                             "congelado o LightGBM sobre crudas")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="muestra el detalle interno del motor")
     args = parser.parse_args()
     configurar_log(logging.DEBUG if args.verbose else logging.INFO)
+    if args.hostil:
+        args.modelo = "mlp"
+    es_lgb = args.modelo == "lgb"
+    es_mlp = args.modelo == "mlp"
 
     global WORK
-    WORK = ROOT / ("work/demo_hostil_runs" if args.hostil
-                   else "work/demo_runs")
-    destino = ROOT / ("outputs/demo_simple_hostil.html" if args.hostil
+    comp = {"logit": "", "mlp": "hostil", "lgb": "lgb"}[args.modelo]
+    WORK = ROOT / (f"work/demo_{comp}_runs" if comp else "work/demo_runs")
+    destino = ROOT / (f"outputs/demo_simple_{comp}.html" if comp
                       else "outputs/demo_simple.html")
     if args.muestra is None:
-        args.muestra = 8000 if args.hostil else 20000
-    modo = "MLP(32)x58" if args.hostil else f"logit(C={args.c})"
+        args.muestra = 20000 if args.modelo == "logit" else 8000
+    modo = {"logit": f"logit(C={args.c})", "mlp": "MLP(32)x58",
+            "lgb": "LGBM(200x31)"}[args.modelo]
     log.info("demo_simple modo=%s trials=%s semillas=%s muestra=%s",
              modo, args.trials, args.semillas, args.muestra)
 
@@ -527,9 +569,13 @@ def main():
     datos = submuestra(datos, args.muestra)
     log.info("Train de busqueda: %d filas", len(datos["ytr"]))
     folds = hacer_folds(datos["ytr"])
-    if args.hostil:
+    if es_mlp:
         evaluar = lambda S: ajuste_mlp_cv(S, datos, folds)  # noqa
         puntuar = lambda S: test_score_mlp(S, datos)  # noqa
+        iv = ranking_univariado(datos, folds)
+    elif es_lgb:
+        evaluar = lambda S: ajuste_lgb_cv(S, datos, folds)  # noqa
+        puntuar = lambda S: test_score_lgb(S, datos)  # noqa
         iv = ranking_univariado(datos, folds)
     else:
         pre = precomputar(datos["xtr"], datos["ytr"], folds,
