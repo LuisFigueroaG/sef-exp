@@ -10,19 +10,36 @@ una vez para el reporte.
 Uso:
     uv run python scripts/demo_simple.py --trials 200 --semillas 0,1,2
     uv run python scripts/demo_simple.py --trials 500 --semillas 0 --c 0.5
+    uv run python scripts/demo_simple.py --hostil --trials 100 --muestra 8000
+
+Modo hostil (--hostil): cambia logistica+WOE por el MLP ganador del
+notebook 05 de MRAP (una capa de 32, alpha y lr congelados, 58 epocas
+por partial_fit) sobre variables crudas winsorizadas 1/99, imputadas
+y escaladas. Sin WOE, sin filtros: mundo no lineal donde el greedy
+sufre. El modo hostil necesita --muestra chica porque cada ajuste
+cuesta segundos.
 """
 
 import argparse
+import contextlib
 import csv
+import io
+import logging
 import statistics
 import time
+import warnings
 from pathlib import Path
 
 import numpy as np
 import polars as pl
 from optbinning import OptimalBinning
+from sklearn.exceptions import ConvergenceWarning
+from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
+from sklearn.neural_network import MLPClassifier
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 from sef_exp import fase3b
 from sef_exp.evaluador import (
@@ -35,6 +52,26 @@ K = 6
 METODOS_MOTOR = ("aleatorio", "local", "ga_local", "sef")
 METODOS_STEP = ("forward", "backward", "hibrido")
 WORK = ROOT / "work/demo_runs"
+
+log = logging.getLogger("demo")
+
+# MLP ganador del notebook 05 de MRAP (configuracion congelada).
+MLP_CFG = {"hidden_layer_sizes": (32,), "activation": "relu",
+           "solver": "adam", "alpha": 0.009735125945191669,
+           "learning_rate_init": 0.0005633564508332506,
+           "batch_size": 1024, "max_iter": 1, "random_state": 42}
+MLP_EPOCAS = 58
+
+
+def configurar_log(nivel=logging.INFO):
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(
+        "[%(levelname).1s %(asctime)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"))
+    root = logging.getLogger()
+    root.handlers = [handler]
+    root.setLevel(nivel)
+    warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
 
 class SinCache:
@@ -76,6 +113,67 @@ def ajuste_cv(S, datos, folds, pre, c):
         return float(np.mean(aucs))
     except Exception:
         return None
+
+
+def crudo(datos, v):
+    return datos["xtr"][v].to_numpy().astype(np.float64)
+
+
+def preparar_mlp(Atr, Ava):
+    """Winsoriza 1/99, imputa mediana y escala; todo ajustado en train."""
+    limites = np.nanquantile(Atr, [0.01, 0.99], axis=0)
+    Atr = np.clip(Atr, limites[0], limites[1]).astype(np.float32)
+    Ava = np.clip(Ava, limites[0], limites[1]).astype(np.float32)
+    pipe = make_pipeline(SimpleImputer(strategy="median",
+                                       add_indicator=True),
+                         StandardScaler())
+    return (pipe.fit_transform(Atr).astype(np.float32),
+            pipe.transform(Ava).astype(np.float32))
+
+
+def ajustar_mlp(Atr, ytr):
+    clf = MLPClassifier(**MLP_CFG)
+    for _ in range(MLP_EPOCAS):
+        clf.partial_fit(Atr, ytr, classes=np.array([0, 1]))
+    return clf
+
+
+def ajuste_mlp_cv(S, datos, folds):
+    """AUC medio de 5 folds con el MLP congelado; None si algo falla."""
+    try:
+        aucs = []
+        for tr, va in folds:
+            Atr, Ava = preparar_mlp(
+                np.column_stack([crudo(datos, v)[tr] for v in S]),
+                np.column_stack([crudo(datos, v)[va] for v in S]))
+            if not (np.all(np.isfinite(Atr)) and np.all(np.isfinite(Ava))):
+                return None
+            clf = ajustar_mlp(Atr, datos["ytr"][tr])
+            aucs.append(float(roc_auc_score(
+                datos["ytr"][va], clf.predict_proba(Ava)[:, 1])))
+        return float(np.mean(aucs))
+    except Exception:
+        return None
+
+
+def ranking_univariado(datos, folds):
+    """AUC univariado con logistica cruda: solo para sembrar el inicio."""
+    log.info("Ranking univariado para la siembra inicial")
+    rank = {}
+    for v in datos["vars"]:
+        try:
+            aucs = []
+            for tr, va in folds:
+                x = crudo(datos, v)
+                clf = LogisticRegression(max_iter=2000)
+                clf.fit(x[tr].reshape(-1, 1), datos["ytr"][tr])
+                aucs.append(float(roc_auc_score(
+                    datos["ytr"][va],
+                    clf.predict_proba(x[va].reshape(-1, 1))[:, 1])))
+            rank[v] = float(np.mean(aucs))
+        except Exception:
+            rank[v] = 0.5
+    return rank
 
 
 def correr_motor(metodo, seed, trials, cfg, evaluar_set, iv):
@@ -270,6 +368,16 @@ def test_score(S, datos, c):
                                clf.predict_proba(Wte)[:, 1]))
 
 
+def test_score_mlp(S, datos):
+    Atr, Ate = preparar_mlp(
+        np.column_stack([crudo(datos, v) for v in S]),
+        np.column_stack(
+            [datos["xte"][v].to_numpy().astype(np.float64) for v in S]))
+    clf = ajustar_mlp(Atr, datos["ytr"])
+    return float(roc_auc_score(datos["yte"],
+                               clf.predict_proba(Ate)[:, 1]))
+
+
 def leer_trazas():
     series = {}
     for path in sorted(WORK.glob("*.csv")):
@@ -355,8 +463,8 @@ def figura_html(series, test_rows, subtitulo):
         font-variant-numeric: tabular-nums; }} .vars {{ font-size: 11px; }}
     </style></head><body><main>
     <h1>Demo simple · MRAP sin cache, tiempo real</h1>
-    <p class="lede">Logistica con regularizacion, sin filtros, cada
-    propuesta se ajusta de verdad. Test abierto una sola vez.<br>
+    <p class="lede">Cada propuesta se ajusta de verdad, sin cache.
+    Test abierto una sola vez.<br>
     {subtitulo}</p>
     <section class="card"><h2>Mejor CV por metodo y score en test</h2>
     <table><thead><tr><th>Metodo</th><th>CV</th><th>Test</th>
@@ -371,51 +479,93 @@ def main():
     parser.add_argument("--trials", type=int, default=200)
     parser.add_argument("--semillas", default="0,1,2")
     parser.add_argument("--c", type=float, default=1.0)
-    parser.add_argument("--muestra", type=int, default=20000,
+    parser.add_argument("--muestra", type=int, default=None,
                         help="filas de train para buscar (test siempre "
-                             "completo); mismo recorte para todos")
+                             "completo); mismo recorte para todos "
+                             "(default: 20000, 8000 en hostil)")
+    parser.add_argument("--hostil", action="store_true",
+                        help="MLP congelado sobre crudas en vez de "
+                             "logistica+WOE")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="muestra el detalle interno del motor")
     args = parser.parse_args()
+    configurar_log(logging.DEBUG if args.verbose else logging.INFO)
+
+    global WORK
+    WORK = ROOT / ("work/demo_hostil_runs" if args.hostil
+                   else "work/demo_runs")
+    destino = ROOT / ("outputs/demo_simple_hostil.html" if args.hostil
+                      else "outputs/demo_simple.html")
+    if args.muestra is None:
+        args.muestra = 8000 if args.hostil else 20000
+    modo = "MLP(32)x58" if args.hostil else f"logit(C={args.c})"
+    log.info("demo_simple modo=%s trials=%s semillas=%s muestra=%s",
+             modo, args.trials, args.semillas, args.muestra)
 
     WORK.mkdir(parents=True, exist_ok=True)
     for viejo in WORK.glob("*.csv"):
         viejo.unlink()
-    print("Cargando train (test cerrado hasta el reporte)...", flush=True)
+    log.info("Cargando train (test cerrado hasta el reporte)")
     datos = cargar_datos(str(ROOT / "data"))
     datos = submuestra(datos, args.muestra)
-    print(f"Train de busqueda: {len(datos['ytr'])} filas", flush=True)
+    log.info("Train de busqueda: %d filas", len(datos["ytr"]))
     folds = hacer_folds(datos["ytr"])
-    pre = precomputar(datos["xtr"], datos["ytr"], folds,
-                      list(datos["xtr"].columns))
-    iv = {v: statistics.mean(pre[(r, v)]["iv"] for r in range(len(folds)))
-          for v in datos["xtr"].columns}
+    if args.hostil:
+        evaluar = lambda S: ajuste_mlp_cv(S, datos, folds)  # noqa
+        puntuar = lambda S: test_score_mlp(S, datos)  # noqa
+        iv = ranking_univariado(datos, folds)
+    else:
+        pre = precomputar(datos["xtr"], datos["ytr"], folds,
+                          list(datos["xtr"].columns))
+        iv = {v: statistics.mean(pre[(r, v)]["iv"]
+                                 for r in range(len(folds)))
+              for v in datos["xtr"].columns}
+        evaluar = lambda S: ajuste_cv(S, datos, folds, pre, args.c)  # noqa
+        puntuar = lambda S: test_score(S, datos, args.c)  # noqa
     cfg = fase3b.Config(nombre="demo", familias=FAMILIAS_COMPLETAS, k=K,
                         presupuestos=(args.trials,))
-    evaluar = lambda S: ajuste_cv(S, datos, folds, pre, args.c)  # noqa
     t0 = time.perf_counter()
+    silencio = contextlib.nullcontext() if args.verbose \
+        else contextlib.redirect_stdout(io.StringIO())
 
-    for metodo in METODOS_MOTOR:
-        for seed in [int(x) for x in args.semillas.split(",")]:
+    with silencio:
+        for metodo in METODOS_MOTOR:
+            for seed in [int(x) for x in args.semillas.split(",")]:
+                t = time.perf_counter()
+                fits = correr_motor(metodo, seed, args.trials, cfg,
+                                    lambda S, c, g: evaluar(S), iv)
+                df = pl.read_csv(WORK / f"{metodo if metodo != 'sef' else 'sef_completo'}_{seed:02d}.csv",
+                                 columns=["trial", "mejor_J", "mejor_S"])
+                df = df.with_columns(
+                    pl.col("mejor_J").cast(pl.Float64, strict=False))
+                df = df.filter(pl.col("mejor_J").is_not_null())
+                if len(df):
+                    top = df.sort("trial").tail(1)
+                    log.info("%s semilla=%s finished with value=%.4f "
+                             "(trial %d/%d) en %.1fs, %d ajustes",
+                             metodo, seed, top["mejor_J"][0],
+                             top["trial"][0], args.trials,
+                             time.perf_counter() - t, fits)
+                else:
+                    log.info("%s semilla=%s sin conjunto factible en %.1fs, "
+                             "%d ajustes", metodo, seed,
+                             time.perf_counter() - t, fits)
+
+        finales = {}
+        for nombre, fn in (("forward", lambda: correr_forward(cfg, evaluar)),
+                           ("backward", lambda: correr_backward(
+                               cfg, evaluar, FAMILIAS_COMPLETAS)),
+                           ("hibrido", lambda: correr_hibrido(cfg, evaluar))):
             t = time.perf_counter()
-            fits = correr_motor(metodo, seed, args.trials, cfg,
-                                lambda S, c, g: evaluar(S), iv)
-            print(f"{metodo} s={seed}: {fits} ajustes en "
-                  f"{time.perf_counter() - t:.1f}s", flush=True)
+            _, S = fn()
+            J = evaluar(S) if S is not None and len(S) == K else None
+            finales[nombre] = (J, S)
+            log.info("%s finished with value=%s en %.1fs, S=%s", nombre,
+                     f"{J:.4f}" if J is not None else "-",
+                     time.perf_counter() - t,
+                     "|".join(S) if S else "-")
 
-    finales = {}
-    _, Sf = correr_forward(cfg, evaluar)
-    Jf = evaluar(Sf) if Sf is not None and len(Sf) == K else None
-    finales["forward"] = (Jf, Sf)
-    print(f"forward: J={Jf} S={'|'.join(Sf) if Sf else '-'}", flush=True)
-    _, Sb = correr_backward(cfg, evaluar, FAMILIAS_COMPLETAS)
-    Jb = evaluar(Sb) if Sb is not None and len(Sb) == K else None
-    finales["backward"] = (Jb, Sb)
-    print(f"backward: J={Jb} S={'|'.join(Sb) if Sb else '-'}", flush=True)
-    _, Sh = correr_hibrido(cfg, evaluar)
-    Jh = evaluar(Sh) if Sh is not None and len(Sh) == K else None
-    finales["hibrido"] = (Jh, Sh)
-    print(f"hibrido: J={Jh} S={'|'.join(Sh) if Sh else '-'}", flush=True)
-
-    print("Abriendo test una vez para el reporte...", flush=True)
+    log.info("Abriendo test una vez para el reporte")
     test_rows = []
     for metodo, dfs in leer_trazas().items():
         mejor_cv, mejor_s, ensayos = None, None, 0
@@ -430,20 +580,19 @@ def main():
             if Jf_ is not None and Sf_ is not None and len(Sf_) == K:
                 mejor_cv, mejor_s = Jf_, Sf_
         if mejor_s is None or len(mejor_s) != K:
-            print(f"{metodo}: sin conjunto completo, se omite test",
-                  flush=True)
+            log.info("%s: sin conjunto completo, se omite test", metodo)
             continue
-        te = test_score(mejor_s, datos, args.c)
+        te = puntuar(mejor_s)
         test_rows.append((metodo, mejor_cv, te, ensayos, "|".join(mejor_s)))
-        print(f"{metodo}: CV={mejor_cv:.4f} test={te:.4f} S={'|'.join(mejor_s)}",
-              flush=True)
-    destino = ROOT / "outputs/demo_simple.html"
-    subtitulo = (f"C={args.c}, trials={args.trials}, semillas={args.semillas}, "
+        log.info("%s best CV=%.4f test=%.4f S=%s",
+                 metodo, mejor_cv, te, "|".join(mejor_s))
+    subtitulo = (f"modo={modo}, trials={args.trials}, "
+                 f"semillas={args.semillas}, "
                  f"train de busqueda={len(datos['ytr'])} filas, "
                  f"test completo={len(datos['yte'])} filas.")
     destino.write_text(figura_html(leer_trazas(), sorted(
         test_rows, key=lambda r: -r[1]), subtitulo))
-    print(f"Total {time.perf_counter() - t0:.1f}s -> {destino}", flush=True)
+    log.info("Fin en %.1fs -> %s", time.perf_counter() - t0, destino)
 
 
 if __name__ == "__main__":
