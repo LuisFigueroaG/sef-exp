@@ -44,6 +44,17 @@ uv run python -m sef_exp.fase3
 uv run python -m sef_exp.fase3 --solo-graficos
 ```
 
+## Desarrollo
+
+Herramientas dev (`dependency-groups.dev` en `pyproject.toml`):
+`pytest`, `ruff`, `pyright`.
+
+```sh
+uv run ruff check src tests
+uv run pytest tests -q
+uv run pyright src
+```
+
 ## Roadmap
 
 1. Contrato del problema y evaluador comun con folds y semillas fijas
